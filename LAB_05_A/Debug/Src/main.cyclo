@@ -1,0 +1,9 @@
+C:/CSE 2-2/CSE 2206/CSE-2206--MicroController-Lab-And-Project-apon/CSE-2206--MicroController-Lab-And-Project-apon/LAB_05_A/CMSIS/Include/core_cm4.h:1684:22:__NVIC_EnableIRQ	2
+C:/CSE 2-2/CSE 2206/CSE-2206--MicroController-Lab-And-Project-apon/CSE-2206--MicroController-Lab-And-Project-apon/LAB_05_A/CMSIS/Include/core_cm4.h:1814:22:__NVIC_SetPriority	2
+../Src/main.c:17:6:SystemClock_Config	6
+../Src/main.c:77:6:DMA1_Init	3
+../Src/main.c:122:6:DMA1_Stream6_IRQHandler	2
+../Src/main.c:132:6:DMA_UART_Transmit	2
+../Src/main.c:144:6:DMA1_Stream5_IRQHandler	3
+../Src/main.c:162:6:USART2_DMA_Init	1
+../Src/main.c:178:5:main	1

@@ -1,0 +1,95 @@
+/* Lab 4A - UART2 Receive Interrupt + Ring Buffer (No HAL) */
+#include "stm32f4xx.h"
+#include <string.h>
+#include <stdio.h>
+
+#define BUF_SIZE 128
+
+/* * Volatile keyword prevents the compiler from optimizing these variables
+ * into registers, ensuring changes in the ISR are visible to the main loop.
+ */
+volatile char ring[BUF_SIZE];
+volatile uint8_t head = 0, tail = 0;
+volatile uint8_t lineReady = 0;
+
+/* USART2 ISR - The Producer */
+void USART2_IRQHandler(void) {
+    // Check if the Receive Data Register Not Empty interrupt flag is set
+    if (USART2->SR & USART_SR_RXNE) {
+        char c = (char)USART2->DR;  /* Reading DR clears RXNE flag */
+
+        // Add byte to ring buffer
+        ring[head] = c;
+        head = (head + 1) % BUF_SIZE;
+
+        // If Enter key is pressed, notify the main loop
+        if (c == '\r') {
+            lineReady = 1;
+        }
+    }
+
+    // Handle Overrun Errors (ORE) - Occurs if data arrives faster than processed
+    if (USART2->SR & USART_SR_ORE) {
+        (void)USART2->DR; /* Reading DR also clears the ORE flag */
+    }
+}
+
+/* Blocking SendString function for feedback */
+void USART2_SendString(const char *s) {
+    while (*s) {
+        // Wait for Transmit Data Register Empty flag
+        while (!(USART2->SR & USART_SR_TXE));
+        USART2->DR = (uint8_t)(*s++);
+    }
+}
+
+int main(void) {
+    /* 1. GPIOA + USART2 clock enable */
+    RCC->AHB1ENR |= RCC_AHB1ENR_GPIOAEN;
+    RCC->APB1ENR |= RCC_APB1ENR_USART2EN;
+    __NOP(); __NOP();
+
+    /* 2. Configure GPIO PA2 (TX) and PA3 (RX) as Alternate Function (AF7) */
+    GPIOA->MODER &= ~((3UL << 4) | (3UL << 6));
+    GPIOA->MODER |= ((2UL << 4) | (2UL << 6));
+    GPIOA->AFR[0] &= ~((0xFUL << 8) | (0xFUL << 12));
+    GPIOA->AFR[0] |= ((7UL << 8) | (7UL << 12));
+
+    /* 3. UART Configuration: 115200 Baud @ 45 MHz APB1 Clock */
+    USART2->BRR = (390 << 4) | 10;
+
+    /* 4. Enable UART, TX, RX, and Receive Interrupt (RXNEIE) */
+    USART2->CR1 = USART_CR1_UE | USART_CR1_TE | USART_CR1_RE | USART_CR1_RXNEIE;
+
+    /* 5. NVIC Interrupt Configuration */
+    NVIC_SetPriority(USART2_IRQn, 1);
+    NVIC_EnableIRQ(USART2_IRQn);
+
+    USART2_SendString("UART Interrupt Demo - type and press Enter:\r\n");
+
+    /* Infinite loop - The Consumer */
+    while (1) {
+        if (lineReady) {
+            lineReady = 0;
+
+            /* Drain ring buffer into a local line buffer */
+            char line[BUF_SIZE];
+            uint8_t i = 0;
+
+            // While buffer is not empty
+            while (tail != head) {
+                line[i++] = ring[tail];
+                tail = (tail + 1) % BUF_SIZE;
+
+                // Prevent local buffer overflow
+                if (i >= BUF_SIZE - 1) break;
+            }
+            line[i] = '\0';
+
+            // Format and echo back to terminal
+            char resp[BUF_SIZE + 16];
+            snprintf(resp, sizeof(resp), "Echo: %s\r\n", line);
+            USART2_SendString(resp);
+        }
+    }
+}

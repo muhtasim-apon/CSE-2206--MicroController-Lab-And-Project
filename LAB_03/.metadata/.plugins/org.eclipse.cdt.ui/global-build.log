@@ -1,0 +1,14 @@
+06:46:06 **** Incremental Build of configuration Debug for project LAB_04_A ****
+make -j12 all 
+arm-none-eabi-size  LAB_04_A.elf 
+   text	   data	    bss	    dec	    hex	filename
+   4088	     80	   2032	   6200	   1838	LAB_04_A.elf
+Finished building: default.size.stdout
+ 
+06:46:10 **** Incremental Build of configuration Debug for project LAB_04_A ****
+make -j12 all 
+arm-none-eabi-size  LAB_04_A.elf 
+   text	   data	    bss	    dec	    hex	filename
+   4088	     80	   2032	   6200	   1838	LAB_04_A.elf
+Finished building: default.size.stdout
+ 

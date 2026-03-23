@@ -1,0 +1,80 @@
+#if !defined(STM32F446xx)
+#define STM32F446xx
+#endif
+
+#include "stm32f4xx.h"
+#include <string.h>
+#include <stdio.h>
+#include <stdint.h>
+
+#define BUF_SIZE 128
+volatile char ring[BUF_SIZE];
+volatile uint8_t head = 0, tail = 0;
+volatile uint8_t lineReady = 0;
+
+/* USART2 ISR - Producer */
+void USART2_IRQHandler(void) {
+    /* Check RXNE: Receive Data Register Not Empty */
+    if (USART2->SR & USART_SR_RXNE) {
+        char c = (char)USART2->DR; /* Reading DR clears RXNE */
+        ring[head] = c;
+        head = (head + 1) % BUF_SIZE;
+        if (c == '\r') lineReady = 1;
+    }
+    /* Check ORE: Overrun Error */
+    if (USART2->SR & USART_SR_ORE) {
+        (void)USART2->DR; /* Reading DR clears ORE */
+    }
+}
+
+/* Blocking TX function */
+void USART2_SendString(const char *s) {
+    while (*s) {
+        while (!(USART2->SR & USART_SR_TXE));
+        USART2->DR = (uint8_t)(*s++);
+    }
+}
+
+int main(void) {
+    /* Enable GPIOA and USART2 Clocks */
+    RCC->AHB1ENR |= RCC_AHB1ENR_GPIOAEN;
+    RCC->APB1ENR |= RCC_APB1ENR_USART2EN;
+    __NOP(); __NOP();
+
+    /* Configure PA2 and PA3 as AF7 (USART2) */
+    GPIOA->MODER &= ~((3UL << 4) | (3UL << 6));
+    GPIOA->MODER |= ((2UL << 4) | (2UL << 6));
+    GPIOA->AFR[0] &= ~((0xFUL << 8) | (0xFUL << 12));
+    GPIOA->AFR[0] |= ((7UL << 8) | (7UL << 12));
+
+    /* Baud rate: 115200 @ 45 MHz */
+    USART2->BRR = (390 << 4) | 10;
+
+    /* Enable UART, TX, RX, and RXNE Interrupt */
+    USART2->CR1 = USART_CR1_UE | USART_CR1_TE | USART_CR1_RE | USART_CR1_RXNEIE;
+
+    /* Configure NVIC */
+    NVIC_SetPriority(USART2_IRQn, 1);
+    NVIC_EnableIRQ(USART2_IRQn);
+
+    USART2_SendString("UART Interrupt Demo - type and press Enter:\r\n");
+
+    while (1) {
+        if (lineReady) {
+            lineReady = 0;
+            char line[BUF_SIZE];
+            uint8_t i = 0;
+
+            /* Consumer: Drain ring buffer */
+            while (tail != head) {
+                line[i++] = ring[tail];
+                tail = (tail + 1) % BUF_SIZE;
+            }
+            line[i] = '\0';
+
+            char resp[BUF_SIZE + 16];
+            snprintf(resp, sizeof(resp), "Echo: %s\r\n", line);
+            USART2_SendString(resp);
+        }
+    }
+}

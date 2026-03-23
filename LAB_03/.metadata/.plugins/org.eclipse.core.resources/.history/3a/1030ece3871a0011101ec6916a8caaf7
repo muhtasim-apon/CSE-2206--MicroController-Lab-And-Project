@@ -1,0 +1,104 @@
+/* Lab 4A - UART2 Receive Interrupt + Ring Buffer (No HAL)
+ * Logic implemented:
+ * - RXNE interrupt for data reception
+ * - Lock-free ring buffer for producer (ISR) and consumer (Main)
+ * - Graceful handling of ORE (Overrun Error)
+ * - Volatile correctness for shared indices
+ */
+
+#if !defined(STM32F446xx)
+#define STM32F446xx
+#endif
+
+#include "stm32f4xx.h"
+#include <string.h>
+#include <stdio.h>
+#include <stdint.h>
+
+#define BUF_SIZE 128
+
+/* Volatile Correctness: Ensuring shared data isn't cached in CPU registers */
+volatile char ring[BUF_SIZE];           /* Circular buffer array */
+volatile uint8_t head = 0;             /* Producer index (ISR) */
+volatile uint8_t tail = 0;             /* Consumer index (Main) */
+volatile uint8_t lineReady = 0;        /* Flag to signal complete line */
+
+/* USART2 ISR: The "Producer" */
+void USART2_IRQHandler(void) {
+    /* Handle RXNE: Receive Data Register Not Empty */
+    if (USART2->SR & USART_SR_RXNE) {
+        char c = (char)USART2->DR;     /* Reading DR clears RXNE flag */
+
+        /* Logic for head increment: head = (head + 1) % SIZE */
+        uint8_t nextHead = (head + 1) % BUF_SIZE;
+
+        /* Check if buffer is full: (head + 1) % SIZE == tail */
+        if (nextHead != tail) {
+            ring[head] = c;
+            head = nextHead;           /* Update volatile head after writing */
+        }
+
+        if (c == '\r') {
+            lineReady = 1;
+        }
+    }
+
+    /* Handle ORE: Overrun Error gracefully */
+    if (USART2->SR & USART_SR_ORE) {
+        (void)USART2->DR;              /* Read DR to clear ORE flag */
+    }
+}
+
+/* Polling-based Transmit (decoupled from RX logic) */
+void USART2_SendString(const char *s) {
+    while (*s) {
+        while (!(USART2->SR & USART_SR_TXE));
+        USART2->DR = (uint8_t)(*s++);
+    }
+}
+
+int main(void) {
+    /* Clock and GPIO AF Configuration */
+    RCC->AHB1ENR |= RCC_AHB1ENR_GPIOAEN;
+    RCC->APB1ENR |= RCC_APB1ENR_USART2EN;
+    __NOP(); __NOP();
+
+    /* PA2 (TX) and PA3 (RX) as AF7 */
+    GPIOA->MODER &= ~((3UL << 4) | (3UL << 6));
+    GPIOA->MODER |= ((2UL << 4) | (2UL << 6));
+    GPIOA->AFR[0] &= ~((0xFUL << 8) | (0xFUL << 12));
+    GPIOA->AFR[0] |= ((7UL << 8) | (7UL << 12));
+
+    /* 115200 @ 45 MHz */
+    USART2->BRR = (390 << 4) | 10;
+
+    /* Enable UART + RXNE Interrupt (CR1_RXNEIE) */
+    USART2->CR1 = USART_CR1_UE | USART_CR1_TE | USART_CR1_RE | USART_CR1_RXNEIE;
+
+    NVIC_SetPriority(USART2_IRQn, 1);
+    NVIC_EnableIRQ(USART2_IRQn);
+
+    USART2_SendString("UART Ring Buffer Demo - type and press Enter:\r\n");
+
+    /* Infinite loop: The "Consumer" */
+    while (1) {
+        if (lineReady) {
+            lineReady = 0;
+            char line[BUF_SIZE];
+            uint8_t i = 0;
+
+            /* Consumer logic: drain buffer while tail != head */
+            while (tail != head) {
+                line[i++] = ring[tail];
+                tail = (tail + 1) % BUF_SIZE; /* Increment tail after reading */
+
+                if (i >= BUF_SIZE - 1) break;
+            }
+            line[i] = '\0';
+
+            char resp[BUF_SIZE + 16];
+            snprintf(resp, sizeof(resp), "Echo: %s\r\n", line);
+            USART2_SendString(resp);
+        }
+    }
+}
