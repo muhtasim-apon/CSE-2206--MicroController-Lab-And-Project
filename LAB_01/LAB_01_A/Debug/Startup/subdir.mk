@@ -16,7 +16,7 @@ S_DEPS += \
 
 # Each subdirectory must supply rules for building sources it contributes
 Startup/%.o: ../Startup/%.s Startup/subdir.mk
-	arm-none-eabi-gcc -mcpu=cortex-m4 -g3 -DDEBUG -c -I"E:/2nd Year 2nd Semester/CSE-2206--MicroController-Lab-And-Project/LAB_01/NOHAL_TEST/CMSIS/Device/ST/STM32F4xx/Include" -I"E:/2nd Year 2nd Semester/CSE-2206--MicroController-Lab-And-Project/LAB_01/NOHAL_TEST/CMSIS/Include" -x assembler-with-cpp -MMD -MP -MF"$(@:%.o=%.d)" -MT"$@" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "$@" "$<"
+	arm-none-eabi-gcc -mcpu=cortex-m4 -g3 -DDEBUG -c -I"E:/2nd Year 2nd Semester/CSE-2206--MicroController-Lab-And-Project/LAB_01/LAB_01_A/CMSIS/Device/ST/STM32F4xx/Include" -I"E:/2nd Year 2nd Semester/CSE-2206--MicroController-Lab-And-Project/LAB_01/LAB_01_A/CMSIS/Include" -x assembler-with-cpp -MMD -MP -MF"$(@:%.o=%.d)" -MT"$@" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "$@" "$<"
 
 clean: clean-Startup
 
