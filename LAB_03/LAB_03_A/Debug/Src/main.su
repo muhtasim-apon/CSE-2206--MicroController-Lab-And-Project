@@ -1,0 +1,4 @@
+C:/CSE 2-2/cse2206/all5labs/CSE-2206--MicroController-Lab-And-Project/LAB_03_A/CMSIS/Include/core_cm4.h:1684:22:__NVIC_EnableIRQ	16	static,ignoring_inline_asm
+C:/CSE 2-2/cse2206/all5labs/CSE-2206--MicroController-Lab-And-Project/LAB_03_A/CMSIS/Include/core_cm4.h:1814:22:__NVIC_SetPriority	16	static
+../Src/main.c:9:6:EXTI15_10_IRQHandler	4	static
+../Src/main.c:16:5:main	8	static,ignoring_inline_asm

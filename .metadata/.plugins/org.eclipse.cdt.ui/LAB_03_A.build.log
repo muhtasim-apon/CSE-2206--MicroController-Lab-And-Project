@@ -1,0 +1,20 @@
+22:04:16 **** Build of configuration Debug for project LAB_03_A ****
+make -j12 all 
+arm-none-eabi-gcc -mcpu=cortex-m4 -g3 -DDEBUG -c -I"C:/CSE 2-2/cse2206/all5labs/CSE-2206--MicroController-Lab-And-Project/LAB_03_A/CMSIS/Include" -I"C:/CSE 2-2/cse2206/all5labs/CSE-2206--MicroController-Lab-And-Project/LAB_03_A/CMSIS/Device/ST/STM32F4xx/Include" -x assembler-with-cpp -MMD -MP -MF"Startup/startup_stm32f446retx.d" -MT"Startup/startup_stm32f446retx.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Startup/startup_stm32f446retx.o" "../Startup/startup_stm32f446retx.s"
+arm-none-eabi-gcc "../Src/main.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DSTM32 -DSTM32F4 -DSTM32F446RETx -DNUCLEO_F446RE -c -I../Inc -I"C:/CSE 2-2/cse2206/all5labs/CSE-2206--MicroController-Lab-And-Project/LAB_03_A/CMSIS/Include" -I"C:/CSE 2-2/cse2206/all5labs/CSE-2206--MicroController-Lab-And-Project/LAB_03_A/CMSIS/Device/ST/STM32F4xx/Include" -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Src/main.d" -MT"Src/main.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Src/main.o"
+arm-none-eabi-gcc "../Src/syscalls.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DSTM32 -DSTM32F4 -DSTM32F446RETx -DNUCLEO_F446RE -c -I../Inc -I"C:/CSE 2-2/cse2206/all5labs/CSE-2206--MicroController-Lab-And-Project/LAB_03_A/CMSIS/Include" -I"C:/CSE 2-2/cse2206/all5labs/CSE-2206--MicroController-Lab-And-Project/LAB_03_A/CMSIS/Device/ST/STM32F4xx/Include" -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Src/syscalls.d" -MT"Src/syscalls.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Src/syscalls.o"
+arm-none-eabi-gcc "../Src/sysmem.c" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DSTM32 -DSTM32F4 -DSTM32F446RETx -DNUCLEO_F446RE -c -I../Inc -I"C:/CSE 2-2/cse2206/all5labs/CSE-2206--MicroController-Lab-And-Project/LAB_03_A/CMSIS/Include" -I"C:/CSE 2-2/cse2206/all5labs/CSE-2206--MicroController-Lab-And-Project/LAB_03_A/CMSIS/Device/ST/STM32F4xx/Include" -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Src/sysmem.d" -MT"Src/sysmem.o" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "Src/sysmem.o"
+arm-none-eabi-gcc -o "LAB_03_A.elf" @"objects.list"   -mcpu=cortex-m4 -T"C:\CSE 2-2\cse2206\all5labs\CSE-2206--MicroController-Lab-And-Project\LAB_03_A\STM32F446RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="LAB_03_A.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+Finished building target: LAB_03_A.elf
+ 
+arm-none-eabi-size  LAB_03_A.elf 
+arm-none-eabi-objdump -h -S LAB_03_A.elf  > "LAB_03_A.list"
+   text	   data	    bss	    dec	    hex	filename
+   1072	      0	   1568	   2640	    a50	LAB_03_A.elf
+Finished building: default.size.stdout
+ 
+Finished building: LAB_03_A.list
+ 
+
+22:04:18 Build Finished. 0 errors, 0 warnings. (took 1s.847ms)
+
