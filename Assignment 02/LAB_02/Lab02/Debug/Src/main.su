@@ -1,0 +1,11 @@
+../Src/main.c:5:6:USART2_Init	4	static,ignoring_inline_asm
+../Src/main.c:47:6:PLL_Config	4	static
+../Src/main.c:77:6:delay_us	24	static
+../Src/main.c:91:6:delay_ms	24	static
+../Src/main.c:98:6:delay_s	24	static
+../Src/main.c:104:6:delay_hms	24	static
+../Src/main.c:110:6:USART2_SendChar	16	static
+../Src/main.c:118:6:USART2_SendString	16	static
+../Src/main.c:122:9:USART2_RevChar	4	static
+../Src/main.c:127:6:Tim_Init	4	static,ignoring_inline_asm
+../Src/main.c:139:5:main	64	static
