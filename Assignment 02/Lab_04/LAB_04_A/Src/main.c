@@ -137,6 +137,10 @@ void USART2_INIT(void)
 }
 void PLL_Config(void)
 {
+	//Enabling fpu unit first
+	SCB->CPACR |=((3UL<<10*2)| (3UL<<11*2));//CPACR ER SOFTWARE KE NIYE KAJ KORE
+	__DSB();//ETA DOFTWARE DIRECT READ INE ER JONNO
+	__ISB();//EKTU INTERRUP O ENABLE KORE DILAM
     /* 1. Enable HSI (16 MHz) */
     RCC->CR |= RCC_CR_HSION;
     while (!(RCC->CR & RCC_CR_HSIRDY));  // Wait until HSI ready
@@ -194,10 +198,6 @@ int main(void)
 	USART2_SendString(msg);
 	delay_ms(300);
 	}
-	PWM_SetDuty(50);
-		sprintf(msg,"at Exactly Duty = 50%% CCR1 = %lu\r\n",TIM3->CCR1);
-		//PWM_SetDuty(50);
-		USART2_SendString(msg);
 	USART2_SendString("Five Complete Breathing cycle\r\n");
 	for(int i=0;i<5;i++)
 	{
@@ -206,6 +206,10 @@ int main(void)
 		USART2_SendString(msg);
 		breathing_cycle();
 	}
+	PWM_SetDuty(50);
+			sprintf(msg,"at Exactly Duty = 50%% CCR1 = %lu\r\n",TIM3->CCR1);
+			//PWM_SetDuty(50);
+			USART2_SendString(msg);
 		//breathing_cycle();//wait for 2 seconds
 //	while(1)
 //	{

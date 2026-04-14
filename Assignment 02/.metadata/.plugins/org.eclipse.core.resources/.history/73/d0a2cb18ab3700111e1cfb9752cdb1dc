@@ -1,0 +1,199 @@
+#include "stm32f446xx.h"
+#include <stdio.h>
+#include <math.h>
+#define pie acos(-1.0)
+
+/* ── Precompute LUT once globally — not inside function every cycle ── */
+static uint8_t LUT[256];
+static uint8_t lut_ready = 0;
+
+void LUT_Init(void)
+{
+    for (int i = 0; i < 256; i++)
+        LUT[i] = (uint8_t)floor(50.0 * (1.0 + sin(2.0 * pie * i / 256.0)));
+    lut_ready = 1;
+}
+
+void PLL_Config(void)
+{
+    /* ── Enable FPU FIRST before any float operation ── */
+    SCB->CPACR |= ((3UL << 10*2) | (3UL << 11*2));  // CP10, CP11 full access
+    __DSB();
+    __ISB();
+
+    RCC->CR |= RCC_CR_HSION;
+    while (!(RCC->CR & RCC_CR_HSIRDY));
+
+    RCC->PLLCFGR = (16  << RCC_PLLCFGR_PLLM_Pos)
+                 | (180 << RCC_PLLCFGR_PLLN_Pos)
+                 | (0   << RCC_PLLCFGR_PLLP_Pos)
+                 | (4   << RCC_PLLCFGR_PLLQ_Pos)
+                 | RCC_PLLCFGR_PLLSRC_HSI;
+
+    RCC->CR |= RCC_CR_PLLON;
+    while (!(RCC->CR & RCC_CR_PLLRDY));
+
+    FLASH->ACR = FLASH_ACR_ICEN | FLASH_ACR_DCEN | FLASH_ACR_LATENCY_2WS;
+
+    RCC->CFGR  = RCC_CFGR_HPRE_DIV1
+               | RCC_CFGR_PPRE1_DIV2
+               | RCC_CFGR_PPRE2_DIV1;
+
+    RCC->CFGR |= RCC_CFGR_SW_PLL;
+    while ((RCC->CFGR & RCC_CFGR_SWS) != RCC_CFGR_SWS_PLL);
+}
+
+void Tim6_Init(void)
+{
+    RCC->APB1ENR |= RCC_APB1ENR_TIM6EN;
+    __NOP(); __NOP();
+    TIM6->CR1  = 0;
+    TIM6->PSC  = 89;
+    TIM6->ARR  = 0xFFFF;
+    TIM6->EGR  = TIM_EGR_UG;
+    TIM6->SR   = 0;
+    TIM6->CR1 |= TIM_CR1_CEN;
+}
+
+void delay_us(uint32_t us)
+{
+    TIM6->CNT = 0;
+    TIM6->SR  = 0;
+    while (TIM6->CNT < us);
+}
+
+void delay_ms(uint32_t ms)
+{
+    for (uint32_t i = 0; i < ms; i++) delay_us(1000);
+}
+
+void Tim3_Init(void)
+{
+    RCC->APB1ENR |= RCC_APB1ENR_TIM3EN;
+    __NOP(); __NOP();
+    TIM3->CR1    = 0;
+    TIM3->PSC    = 89;
+    TIM3->ARR    = 999;
+    TIM3->CCMR1 &= ~TIM_CCMR1_OC1M;
+    TIM3->CCMR1 |=  (6UL << TIM_CCMR1_OC1M_Pos);
+    TIM3->CCMR1 |=  TIM_CCMR1_OC1PE;
+    TIM3->CCER  |=  TIM_CCER_CC1E;
+    TIM3->CCER  &= ~TIM_CCER_CC1P;
+    TIM3->CR1   |=  TIM_CR1_ARPE;
+    TIM3->EGR    =  TIM_EGR_UG;
+    TIM3->CR1   |=  TIM_CR1_CEN;
+}
+
+void GPIO_Init(void)
+{
+    RCC->AHB1ENR |= RCC_AHB1ENR_GPIOAEN;
+    __NOP(); __NOP();
+
+    /* PA6 → AF2 (TIM3_CH1) */
+    GPIOA->MODER   &= ~(3UL << 12);
+    GPIOA->MODER   |=  (2UL << 12);
+    GPIOA->OTYPER  &= ~(1UL <<  6);
+    GPIOA->OSPEEDR &= ~(3UL << 12);
+    GPIOA->OSPEEDR |=  (3UL << 12);
+    GPIOA->PUPDR   &= ~(3UL << 12);
+    GPIOA->AFR[0]  &= ~(0xFUL << 24);
+    GPIOA->AFR[0]  |=  (2UL   << 24);
+
+    /* PA5 → GPIO OUT (LD2) */
+    GPIOA->MODER   &= ~(3UL << 10);
+    GPIOA->MODER   |=  (1UL << 10);
+    GPIOA->OTYPER  &= ~(1UL <<  5);
+    GPIOA->OSPEEDR |=  (3UL << 10);
+    GPIOA->PUPDR   &= ~(3UL << 10);
+
+    /* PA2/PA3 → AF7 (USART2) */
+    GPIOA->MODER   &= ~((3UL<<4)|(3UL<<6));
+    GPIOA->MODER   |=  ((2UL<<4)|(2UL<<6));
+    GPIOA->OTYPER  &= ~((1UL<<2)|(1UL<<3));
+    GPIOA->OSPEEDR &= ~((3UL<<4)|(3UL<<6));
+    GPIOA->OSPEEDR |=  ((3UL<<4)|(3UL<<6));
+    GPIOA->PUPDR   &= ~((3UL<<4)|(3UL<<6));
+    GPIOA->AFR[0]  &= ~((0xFUL<<8)|(0xFUL<<12));
+    GPIOA->AFR[0]  |=  ((7UL<<8) |(7UL<<12));
+}
+
+void USART2_Init(void)
+{
+    RCC->APB1ENR |= RCC_APB1ENR_USART2EN;
+    __NOP();
+    USART2->BRR  = (24<<4)|7;
+    USART2->CR1 |= USART_CR1_UE|USART_CR1_TE|USART_CR1_RE;
+}
+
+void USART2_SendChar(char c)
+{
+    while (!(USART2->SR & USART_SR_TXE));
+    USART2->DR = (uint8_t)c;
+}
+
+void USART2_SendString(const char *str)
+{
+    while (*str) USART2_SendChar(*str++);
+}
+
+void PWM_SetDuty(uint8_t pct)
+{
+    if (pct > 100) pct = 100;
+    TIM3->CCR1 = (uint32_t)(pct * (TIM3->ARR + 1)) / 100;
+}
+
+void breathing_cycle(uint8_t cycle_num)
+{
+    char msg[48];
+    sprintf(msg, "  Cycle %d/5 running...\r\n", cycle_num);
+    USART2_SendString(msg);
+
+    for (int i = 0; i < 256; i++) {
+        PWM_SetDuty(LUT[i]);
+
+        /* LD2 heartbeat + print every 32 steps */
+        if (i % 32 == 0) {
+            GPIOA->ODR ^= (1UL << 5);
+            sprintf(msg, "    step %3d: duty=%3d%%\r\n", i, LUT[i]);
+            USART2_SendString(msg);
+        }
+
+        delay_ms(8);    // TIM6 only — TIM3 PWM untouched
+    }
+    USART2_SendString("  Done.\r\n");
+}
+
+int main(void)
+{
+    PLL_Config();       // FPU enabled inside here, first thing
+    LUT_Init();         // compute sin LUT ONCE with FPU active
+    Tim6_Init();
+    Tim3_Init();
+    GPIO_Init();
+    USART2_Init();
+
+    char msg[64];
+    USART2_SendString("\r\n=== Task 4: TIM3 PWM (Bare-Metal) ===\r\n\r\n");
+
+    /* 1. Duty sweep */
+    USART2_SendString("--- Duty Cycle Sweep ---\r\n");
+    for (int i = 0; i <= 100; i += 10) {
+        PWM_SetDuty(i);
+        sprintf(msg, "Duty = %3d%%  CCR1 = %lu\r\n", i, TIM3->CCR1);
+        USART2_SendString(msg);
+        delay_ms(300);
+    }
+
+    /* 2. Five breathing cycles */
+    USART2_SendString("\r\n--- Five Breathing Cycles (2s each) ---\r\n");
+    for (int i = 1; i <= 5; i++)
+        breathing_cycle(i);
+
+    /* 3. Final 50% hold */
+    PWM_SetDuty(50);
+    sprintf(msg, "\r\nat Exactly Duty = 50%%  CCR1 = %lu\r\n", TIM3->CCR1);
+    USART2_SendString(msg);
+    USART2_SendString("=== Demo Complete ===\r\n");
+
+    while (1);
+}

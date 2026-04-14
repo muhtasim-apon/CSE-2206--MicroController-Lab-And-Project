@@ -1,0 +1,241 @@
+#include "stm32f446xx.h"
+#include <stdio.h>
+#include <math.h>
+#define pie acos(-1.0)
+
+/* ═══════════════════════════════════════════════════════════════
+ *  PLL CONFIG — SYSCLK = 90 MHz, APB1 = 45 MHz, APB2 = 90 MHz
+ * ═══════════════════════════════════════════════════════════════ */
+void PLL_Config(void)
+{
+    RCC->CR |= RCC_CR_HSION;
+    while (!(RCC->CR & RCC_CR_HSIRDY));
+
+    RCC->PLLCFGR = (16  << RCC_PLLCFGR_PLLM_Pos)
+                 | (180 << RCC_PLLCFGR_PLLN_Pos)
+                 | (0   << RCC_PLLCFGR_PLLP_Pos)   // PLLP = 2
+                 | (4   << RCC_PLLCFGR_PLLQ_Pos)
+                 | RCC_PLLCFGR_PLLSRC_HSI;
+
+    RCC->CR |= RCC_CR_PLLON;
+    while (!(RCC->CR & RCC_CR_PLLRDY));
+
+    FLASH->ACR = FLASH_ACR_ICEN | FLASH_ACR_DCEN | FLASH_ACR_LATENCY_2WS;
+
+    RCC->CFGR  = RCC_CFGR_HPRE_DIV1
+               | RCC_CFGR_PPRE1_DIV2   // APB1 = 45 MHz
+               | RCC_CFGR_PPRE2_DIV1;
+
+    RCC->CFGR |= RCC_CFGR_SW_PLL;
+    while ((RCC->CFGR & RCC_CFGR_SWS) != RCC_CFGR_SWS_PLL);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+ *  TIM6 — 1 µs tick, used ONLY for delays
+ *  APB1 timer clock = 90 MHz (×2 multiplier when APB1 div ≠ 1)
+ *  PSC = 89  →  90 MHz / 90 = 1 MHz  →  1 µs per tick
+ * ═══════════════════════════════════════════════════════════════ */
+void Tim6_Init(void)
+{
+    RCC->APB1ENR |= RCC_APB1ENR_TIM6EN;
+    __NOP(); __NOP();
+    TIM6->CR1  = 0;
+    TIM6->PSC  = 89;
+    TIM6->ARR  = 0xFFFF;    // max 65535 µs per single wait
+    TIM6->EGR  = TIM_EGR_UG;
+    TIM6->SR   = 0;
+    TIM6->CR1 |= TIM_CR1_CEN;
+}
+
+/* ── delay_us: max 65535 µs per call (fine for delay_ms loop) ── */
+void delay_us(uint32_t us)
+{
+    TIM6->CNT = 0;
+    TIM6->SR  = 0;
+    while (TIM6->CNT < us);   // simple busy-wait, TIM6 free-runs
+}
+
+void delay_ms(uint32_t ms)
+{
+    for (uint32_t i = 0; i < ms; i++) delay_us(1000);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+ *  TIM3 CH1 — PWM Mode 1 on PA6 (AF2), 1 kHz
+ *  PSC = 89  →  1 µs tick
+ *  ARR = 999 →  1 kHz period
+ * ═══════════════════════════════════════════════════════════════ */
+void Tim3_Init(void)
+{
+    RCC->APB1ENR |= RCC_APB1ENR_TIM3EN;
+    __NOP(); __NOP();
+
+    TIM3->CR1    = 0;                           // disable before config
+
+    TIM3->PSC    = 89;                          // 1 µs tick
+    TIM3->ARR    = 999;                         // 1 kHz
+
+    /* PWM Mode 1: OC1M = 110b */
+    TIM3->CCMR1 &= ~TIM_CCMR1_OC1M;
+    TIM3->CCMR1 |=  (6UL << TIM_CCMR1_OC1M_Pos);
+    TIM3->CCMR1 |=  TIM_CCMR1_OC1PE;           // preload enable
+
+    TIM3->CCER  |=  TIM_CCER_CC1E;             // CH1 output enable
+    TIM3->CCER  &= ~TIM_CCER_CC1P;             // active-high
+
+    TIM3->CR1   |=  TIM_CR1_ARPE;              // auto-reload preload
+    TIM3->EGR    =  TIM_EGR_UG;               // force register load
+    TIM3->CR1   |=  TIM_CR1_CEN;              // start counter
+}
+
+/* ═══════════════════════════════════════════════════════════════
+ *  GPIO INIT
+ *  PA6 → AF2 (TIM3_CH1, PWM output)
+ *  PA5 → GPIO OUT (LD2 onboard LED, timing reference)
+ *  PA2 → AF7 (USART2_TX)
+ *  PA3 → AF7 (USART2_RX)
+ * ═══════════════════════════════════════════════════════════════ */
+void GPIO_Init(void)
+{
+    RCC->AHB1ENR |= RCC_AHB1ENR_GPIOAEN;
+    __NOP(); __NOP();
+
+    /* ── PA6: AF2 = TIM3_CH1 ── */
+    GPIOA->MODER   &= ~(3UL << 12);
+    GPIOA->MODER   |=  (2UL << 12);            // Alternate Function
+    GPIOA->OTYPER  &= ~(1UL <<  6);            // Push-pull
+    GPIOA->OSPEEDR &= ~(3UL << 12);
+    GPIOA->OSPEEDR |=  (3UL << 12);            // Very high speed
+    GPIOA->PUPDR   &= ~(3UL << 12);            // No pull
+    GPIOA->AFR[0]  &= ~(0xFUL << 24);
+    GPIOA->AFR[0]  |=  (2UL   << 24);          // AF2
+
+    /* ── PA5: LD2 output ── */
+    GPIOA->MODER   &= ~(3UL << 10);
+    GPIOA->MODER   |=  (1UL << 10);            // Output
+    GPIOA->OTYPER  &= ~(1UL <<  5);            // Push-pull
+    GPIOA->OSPEEDR |=  (3UL << 10);
+    GPIOA->PUPDR   &= ~(3UL << 10);
+
+    /* ── PA2/PA3: AF7 = USART2 ── */
+    GPIOA->MODER   &= ~((3UL << 4) | (3UL << 6));
+    GPIOA->MODER   |=  ((2UL << 4) | (2UL << 6));
+    GPIOA->OTYPER  &= ~((1UL << 2) | (1UL << 3));
+    GPIOA->OSPEEDR &= ~((3UL << 4) | (3UL << 6));
+    GPIOA->OSPEEDR |=  ((3UL << 4) | (3UL << 6));
+    GPIOA->PUPDR   &= ~((3UL << 4) | (3UL << 6));
+    GPIOA->AFR[0]  &= ~((0xFUL << 8) | (0xFUL << 12));
+    GPIOA->AFR[0]  |=  ((7UL   << 8) | (7UL   << 12));
+}
+
+/* ═══════════════════════════════════════════════════════════════
+ *  USART2 — 115200 baud, TX+RX
+ *  USARTDIV = 45 MHz / (16 × 115200) = 24.4140625
+ *  Mantissa = 24, Fraction = round(0.414 × 16) = 7
+ * ═══════════════════════════════════════════════════════════════ */
+void USART2_Init(void)
+{
+    RCC->APB1ENR |= RCC_APB1ENR_USART2EN;
+    __NOP();
+    USART2->BRR  = (24 << 4) | 7;              // 115107 baud (< 0.1% error)
+    USART2->CR1 |= USART_CR1_UE | USART_CR1_TE | USART_CR1_RE;
+}
+
+void USART2_SendChar(char c)
+{
+    while (!(USART2->SR & USART_SR_TXE));
+    USART2->DR = (uint8_t)c;
+}
+
+void USART2_SendString(const char *str)
+{
+    while (*str) USART2_SendChar(*str++);
+}
+
+uint8_t USART2_RecChar(void)
+{
+    while (!(USART2->SR & USART_SR_RXNE));
+    return (uint8_t)(USART2->DR & 0xFF);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+ *  PWM DUTY CONTROL — Algorithm A4.2
+ *  CCR1 = floor(pct × (ARR + 1) / 100)
+ *  Preload active: takes effect at next Update Event (glitch-free)
+ * ═══════════════════════════════════════════════════════════════ */
+void PWM_SetDuty(uint8_t pct)
+{
+    if (pct > 100) pct = 100;
+    TIM3->CCR1 = (uint32_t)(pct * (TIM3->ARR + 1)) / 100;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+ *  BREATHING CYCLE — Algorithm A4.3
+ *  LUT[i] = floor(50 × (1 + sin(2πi/256)))  → range 0–100
+ *  256 steps × 8 ms = 2048 ms ≈ 2 s per cycle
+ *  TIM6 handles delays; TIM3 runs uninterrupted for clean PWM
+ * ═══════════════════════════════════════════════════════════════ */
+void breathing_cycle(uint8_t cycle_num)
+{
+    uint8_t LUT[256];
+    for (int i = 0; i < 256; i++)
+        LUT[i] = (uint8_t)floor(50.0 * (1.0 + sin(2.0 * pie * i / 256.0)));
+
+    char msg[48];
+    sprintf(msg, "  Cycle %d/5 running...\r\n", cycle_num);
+    USART2_SendString(msg);
+
+    for (int i = 0; i < 256; i++) {
+        PWM_SetDuty(LUT[i]);
+
+        /* Toggle LD2 as a heartbeat every 32 steps (visible without LED) */
+        if (i % 32 == 0) {
+            GPIOA->ODR ^= (1UL << 5);
+            sprintf(msg, "    step %3d: duty = %3d%%\r\n", i, LUT[i]);
+            USART2_SendString(msg);
+        }
+
+        delay_ms(8);    // TIM6 only — TIM3 PWM completely untouched
+    }
+
+    USART2_SendString("  Cycle done.\r\n");
+}
+
+/* ═══════════════════════════════════════════════════════════════
+ *  MAIN
+ * ═══════════════════════════════════════════════════════════════ */
+int main(void)
+{
+    PLL_Config();
+    Tim6_Init();        // delays — must come before any delay_ms call
+    Tim3_Init();        // PWM on PA6
+    GPIO_Init();        // PA6 AF2, PA5 output, PA2/3 AF7
+    USART2_Init();
+
+    char msg[64];
+
+    USART2_SendString("\r\n=== Task 4: TIM3 PWM Demo (Bare-Metal) ===\r\n\r\n");
+
+    /* ── 1. Duty-cycle sweep 0%..100% in 10% steps ── */
+    USART2_SendString("--- Duty Cycle Sweep ---\r\n");
+    for (int i = 0; i <= 100; i += 10) {
+        PWM_SetDuty(i);
+        sprintf(msg, "Duty = %3d%%  CCR1 = %lu\r\n", i, TIM3->CCR1);
+        USART2_SendString(msg);
+        delay_ms(300);
+    }
+
+    /* ── 2. Five breathing cycles ── */
+    USART2_SendString("\r\n--- Five Breathing Cycles (2 s each) ---\r\n");
+    for (int i = 1; i <= 5; i++)
+        breathing_cycle(i);
+
+    /* ── 3. Final hold at exactly 50% ── */
+    PWM_SetDuty(50);
+    sprintf(msg, "\r\nat Exactly Duty = 50%%  CCR1 = %lu\r\n", TIM3->CCR1);
+    USART2_SendString(msg);
+
+    USART2_SendString("\r\n=== Demo Complete ===\r\n");
+
+    while (1);
+}
