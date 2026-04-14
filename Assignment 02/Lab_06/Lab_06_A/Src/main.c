@@ -146,7 +146,7 @@ int main(void)
 		char msg[64];
 		TIM2->CCR1=0;
 			double time=1000.0f + ((i)*1000)/180.0f;
-			//double time =500.0f + ((i)*2000)/180.0f; -->eta amr servo motor er jonno . mainly sg90
+			//double time =500.0f + ((i)*2000)/180.0f; //-->eta amr servo motor er jonno . mainly sg90
 			double CCR=time*3.0f;
 			TIM2->CCR1=CCR;
 		sprintf(msg,"%d           %f           %f\r\n",i,time,CCR);
