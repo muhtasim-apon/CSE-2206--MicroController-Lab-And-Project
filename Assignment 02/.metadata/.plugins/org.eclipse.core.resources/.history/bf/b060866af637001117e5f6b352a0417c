@@ -1,0 +1,64 @@
+#include "stm32f446xx.h"
+void Tim2_Init(void)
+{
+	RCC->APB1ENR |=RCC_APB1ENR_TIM2EN;
+	_NOP();
+	TIM2->CR1 &=~TIM_CR1_CEN;
+	TIM2->PSC=29;
+	TIM2->ARR=59999;
+	//TAKEN THESE VALUES BECAUSE MORE ARR IS MORE CCR STEPS . RESULTING MORE RESOLUTION ANS PWM SMOOTHNESS .ALSO THIS IS STANDADRD CONFIGURATION FOR 50 Hz PWM GENERATION
+	TIM2->EGR |=TIM_EGR_UG;
+	TIM2->SR=0;
+	TIM3_CNT=0;
+	TIM3->CCMR1 &=~(TIM_CCMR1_OC1M);
+		//TIM3->CCMR1 |=(TIM_CCMR1_OC1M);
+		TIM3->CCMR1 |=(6UL<<TIM_CCMR1_OC1M_Pos);
+		TIM3->CCMR1|=TIM_CCMR1_OC1PE;
+		TIM3->CCER|=TIM_CCER_CC1E;
+		TIM3->CCER&=~(TIM_CCER_CC1P);
+		TIM3->CR1|=TIM_CR1_ARPE;
+	TIM2->CR1 |= TIM_CR1_CEN;
+}
+void Tim6_Init(void)
+{
+	RCC->APB1ENR |= RCC_APB1ENR_TIM6EN;
+	__NOP();
+	TIM6->CR1=0;
+	TIM6->PSC=89;
+	TIM6->ARR=0xFFFF;
+	TIM6->EGR=TIM_EGR_UG;
+	TIM6->SR=0;
+	TIM6->CR1 |=TIM_CR1_CEN;
+}
+void delay_us(uint32_t us)
+{
+	uint32_t overflow=us/65536;
+	uint32_t remainder=us%65536;
+	TIM6->CNT=0;
+	TIM6->SR &=~TIM_SR_UIF;
+	while(overflow--)
+	{
+		while(!(TIM6->SR & TIM_SR_UIF));
+		TIM6->SR &=~TIM_SR_UIF;
+	}
+	TIM6->CNT=0;
+	while(TIM6->CNT< remainder);
+}
+void GPIO_INIT(void)
+{
+	RCC->AHB1ENR |=RCC_AHB1ENR_GPIOAEN;
+		_NOP();//delay for clock stabilization
+	GPIOA->MODER &=~(3UL<<0);//alternative function mode
+	GPIOA->MODER |=(2UL<<0);
+	GPIOA->OTYPER &=~(1UL<<0);//push pull output type
+	GPIOA->OSPEEDR &= ~(3UL<<0);
+	GPIOA->OSPEEDR |=(3UL<<0);//high speed ensures
+	GPIOA->PUPDR &=~(3UL<<0); //No pull up no pull down mode
+	GPIOA->AFR[0] &= ~(0xF<<0);//clearing bit for pin 6
+	GPIOA->AFR[0] |= (1UL<<0);//value 0010 in 4 bit field of pin 6->enable AF2 MODE
+
+}
+void convert_angle(void)
+{
+	uint32_t
+}
