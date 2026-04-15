@@ -7,5 +7,7 @@ org.eclipse.cdt.dsf.gdb.gdbRemotedescriptorType\:LAB_02_A\ Debug/activeLaunchMod
 org.eclipse.cdt.dsf.gdb.gdbRemotedescriptorType\:LAB_02_A\ Debug/activeLaunchTarget=null\:---
 org.eclipse.cdt.dsf.gdb.gdbRemotedescriptorType\:LAB_04_A\ Debug/activeLaunchMode=run
 org.eclipse.cdt.dsf.gdb.gdbRemotedescriptorType\:LAB_04_A\ Debug/activeLaunchTarget=null\:---
+org.eclipse.cdt.dsf.gdb.gdbRemotedescriptorType\:Lab_02_B\ Debug/activeLaunchMode=run
+org.eclipse.cdt.dsf.gdb.gdbRemotedescriptorType\:Lab_02_B\ Debug/activeLaunchTarget=null\:---
 org.eclipse.cdt.dsf.gdb.gdbRemotedescriptorType\:Lab_06_A\ Debug/activeLaunchMode=run
 org.eclipse.cdt.dsf.gdb.gdbRemotedescriptorType\:Lab_06_A\ Debug/activeLaunchTarget=null\:---
