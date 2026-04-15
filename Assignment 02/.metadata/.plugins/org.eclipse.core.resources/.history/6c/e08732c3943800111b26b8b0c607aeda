@@ -169,11 +169,11 @@ int main(void)
 			sprintf(msg,"3.Toggle %d Status :On\r\n",j++);
 			USART2_SendString(msg);
 			GPIOA->ODR ^=(1UL<<5);
-			delay_ms(250);
+			delay_ms(1000);
 			sprintf(msg,"3.Toggle %d Status :Off\r\n",j++);
 			USART2_SendString(msg);
 			GPIOA->ODR ^=(1UL<<5);
-			delay_ms(250);
+			delay_ms(1000);
 		}
 		USART2_SendString("4.Starting 3 sec Delay:\r\n");
 		delay_s(3);

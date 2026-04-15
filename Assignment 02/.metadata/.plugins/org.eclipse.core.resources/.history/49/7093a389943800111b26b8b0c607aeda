@@ -153,7 +153,7 @@ int main(void)
 	char msg[64];
 	//while(1)
 	//{
-		//uint32_t test_ms=2000;
+		uint32_t test_ms=2000;
 		//sprintf(msg,"Starting %lu ms delay..\r\n", test_ms);
 		//USART2_SendString(msg);
 		USART2_SendString("1.Starting 500 ms Delay:\r\n");
@@ -169,11 +169,11 @@ int main(void)
 			sprintf(msg,"3.Toggle %d Status :On\r\n",j++);
 			USART2_SendString(msg);
 			GPIOA->ODR ^=(1UL<<5);
-			delay_ms(250);
+			delay_ms(1000);
 			sprintf(msg,"3.Toggle %d Status :Off\r\n",j++);
 			USART2_SendString(msg);
 			GPIOA->ODR ^=(1UL<<5);
-			delay_ms(250);
+			delay_ms(1000);
 		}
 		USART2_SendString("4.Starting 3 sec Delay:\r\n");
 		delay_s(3);

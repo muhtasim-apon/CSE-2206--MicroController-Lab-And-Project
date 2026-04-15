@@ -151,9 +151,9 @@ int main(void)
 	Tim_Init();
 	PA5_INIT();
 	char msg[64];
-	//while(1)
-	//{
-		//uint32_t test_ms=2000;
+	while(1)
+	{
+		uint32_t test_ms=2000;
 		//sprintf(msg,"Starting %lu ms delay..\r\n", test_ms);
 		//USART2_SendString(msg);
 		USART2_SendString("1.Starting 500 ms Delay:\r\n");
@@ -162,15 +162,14 @@ int main(void)
 		USART2_SendString("2.Starting 1000 ms Delay:\r\n");
 		delay_ms(1000);
 		USART2_SendString("Completed 1000 ms Delay:\r\n");
-		//delay_ms(test_ms);
-		int j=1;
+		delay_ms(test_ms);
 		for(int i=1;i<=5;i++)
 		{
-			sprintf(msg,"3.Toggle %d Status :On\r\n",j++);
+			sprintf(msg,"3.Toggle %d Status :On\r\n",i);
 			USART2_SendString(msg);
 			GPIOA->ODR ^=(1UL<<5);
 			delay_ms(250);
-			sprintf(msg,"3.Toggle %d Status :Off\r\n",j++);
+			sprintf(msg,"3.Toggle %d Status :Off\r\n",i+1);
 			USART2_SendString(msg);
 			GPIOA->ODR ^=(1UL<<5);
 			delay_ms(250);
@@ -183,6 +182,6 @@ int main(void)
 		USART2_SendString("5.Completed 0 H 0 M 5 sec Delay:\r\n");
 		//USART2_SendString("Done.\r\n");
 		//delay_s(1);
-	//}
+	}
 
 }

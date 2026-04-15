@@ -44,14 +44,6 @@ void USART2_Init(void)
     USART2->CR1 |= USART_CR1_UE;
 }
 
-void PA5_INIT(void)
-{
-	GPIOA->MODER &= ~(3UL<<10);
-	GPIOA->MODER |=(1UL<<10);
-	GPIOA->OTYPER &= ~(1UL<<5);
-	GPIOA->OSPEEDR &=~(3UL<<10);
-	GPIOA->PUPDR &=~(3UL<<10);
-}
 void PLL_Config(void)
 {
     /* 1. Enable HSI (16 MHz) */
@@ -149,40 +141,15 @@ int main(void)
 	PLL_Config();
 	USART2_Init();
 	Tim_Init();
-	PA5_INIT();
-	char msg[64];
-	//while(1)
-	//{
-		//uint32_t test_ms=2000;
-		//sprintf(msg,"Starting %lu ms delay..\r\n", test_ms);
-		//USART2_SendString(msg);
-		USART2_SendString("1.Starting 500 ms Delay:\r\n");
-		delay_ms(500);
-		USART2_SendString("Completed 500 ms Delay:\r\n");
-		USART2_SendString("2.Starting 1000 ms Delay:\r\n");
-		delay_ms(1000);
-		USART2_SendString("Completed 1000 ms Delay:\r\n");
-		//delay_ms(test_ms);
-		int j=1;
-		for(int i=1;i<=5;i++)
-		{
-			sprintf(msg,"3.Toggle %d Status :On\r\n",j++);
-			USART2_SendString(msg);
-			GPIOA->ODR ^=(1UL<<5);
-			delay_ms(250);
-			sprintf(msg,"3.Toggle %d Status :Off\r\n",j++);
-			USART2_SendString(msg);
-			GPIOA->ODR ^=(1UL<<5);
-			delay_ms(250);
-		}
-		USART2_SendString("4.Starting 3 sec Delay:\r\n");
-		delay_s(3);
-		USART2_SendString("4.Completed 3 sec Delay:\r\n");
-		USART2_SendString("5.Starting 0 H 0 M 5 sec Delay:\r\n");
-		delay_hms(0,0,5);
-		USART2_SendString("5.Completed 0 H 0 M 5 sec Delay:\r\n");
-		//USART2_SendString("Done.\r\n");
+	char msg[50];
+	while(1)
+	{
+		uint32_t test_ms=2000;
+		sprintf(msg,"Starting %lu ms delay..\r\n", test_ms);
+		USART2_SendString(msg);
+		delay_ms(test_ms);
+		USART2_SendString("Done.\r\n");
 		//delay_s(1);
-	//}
+	}
 
 }
