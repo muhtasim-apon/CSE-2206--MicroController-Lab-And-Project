@@ -95,7 +95,7 @@ void DWT_CONFIG(void)
 
 uint32_t DWT_TIME(uint32_t cycles, uint32_t factor)
 {
-    double seconds = cycles / 90000000.0; // As SYSCLK = 90 MHz
+    double seconds = cycles / 180000000.0; // As SYSCLK = 180 MHz
     seconds *= factor;
     return (uint32_t)seconds;
 }
@@ -226,14 +226,14 @@ void PROFILE_01_TIM(void)
 
 void PROFILE_03_DWT(void)
 {
-	char* c = "Profiling code speed at 90MHz clock ticks.....\r\n";
+	char* c = "Profiling code speed at 180MHz clock ticks....\r\n";
 	uint32_t T1 = DWT -> CYCCNT;
 	HAL_UART_Transmit(&huart2, (uint8_t*)c, strlen(c), HAL_MAX_DELAY);
 	uint32_t T2 = DWT -> CYCCNT;
 	uint32_t cycles = T2 - T1;
 	char t[10];
 	CALC_DWT(str5, cycles);
-	double micros = cycles / 90.0;
+	double micros = cycles / 180.0;
 	micros = 480 / micros; // 8 bit sending, 1 start bit, 1/2 stop bits, generally 10 bits
 	micros *= 1e6;
 	CONVERTER((uint32_t)micros, t);
@@ -242,7 +242,7 @@ void PROFILE_03_DWT(void)
 
 void PROFILE_03_TIM(void)
 {
-	char* c = "Profiling code speed at 90MHz clock ticks.....\r\n";
+	char* c = "Profiling code speed at 180MHz clock ticks....\r\n";
 	TIM2 -> CNT = 0;
 	uint32_t T1 = __HAL_TIM_GET_COUNTER(&htim2);
 	HAL_UART_Transmit(&huart2, (uint8_t*)c, strlen(c), HAL_MAX_DELAY);
@@ -409,11 +409,18 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
   RCC_OscInitStruct.PLL.PLLM = 16;
-  RCC_OscInitStruct.PLL.PLLN = 180;
+  RCC_OscInitStruct.PLL.PLLN = 360;
   RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
   RCC_OscInitStruct.PLL.PLLQ = 2;
   RCC_OscInitStruct.PLL.PLLR = 2;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Activate the Over-Drive mode
+  */
+  if (HAL_PWREx_EnableOverDrive() != HAL_OK)
   {
     Error_Handler();
   }
@@ -424,10 +431,10 @@ void SystemClock_Config(void)
                               |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
   RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
   RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
-  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
-  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV4;
+  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV2;
 
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK)
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_5) != HAL_OK)
   {
     Error_Handler();
   }

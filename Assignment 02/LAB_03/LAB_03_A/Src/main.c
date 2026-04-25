@@ -27,25 +27,25 @@ void PLL_CONFIG(void)
 	// Configuration of PLL
 	RCC -> PLLCFGR =
 			(16 << RCC_PLLCFGR_PLLM_Pos) | // 16MHz HSI -> 1MHz (Pre-scaler)
-			(180 << RCC_PLLCFGR_PLLN_Pos) | // 1MHz to 180MHz (Multiplier)
-			(0 << RCC_PLLCFGR_PLLP_Pos) | // 180 to 90MHz -> PLL_CLK
+			(360 << RCC_PLLCFGR_PLLN_Pos) | // 1MHz to 360MHz (Multiplier)
+			(0 << RCC_PLLCFGR_PLLP_Pos) | // 360 to 180MHz -> PLL_CLK
 			RCC_PLLCFGR_PLLSRC_HSI; // Base Clock Source -> HSI
 
 	// initialize the PLL for operation
 	RCC -> CR |= RCC_CR_PLLON;
 	while (!(RCC -> CR & RCC_CR_PLLRDY));
 
-	// Configure Flash Latency for PLL_CLK = 90MHz at Access Control Register
+	// Configure Flash Latency for PLL_CLK = 180MHz at Access Control Register
 	FLASH -> ACR =
 			FLASH_ACR_ICEN | // Instruction Cache Enable
 			FLASH_ACR_DCEN | // Data Cache Enable
-			FLASH_ACR_LATENCY_2WS; // Latency of 2 Wait States as per state cover approximately 30MHz
+			FLASH_ACR_LATENCY_5WS; // Latency of 5 Wait States as per state cover approximately 30MHz
 
 	// Configuring Pre-scalers
 	RCC -> CFGR |=
-			RCC_CFGR_HPRE_DIV1 | // PLL_CLK -> AHB Bus -> 90MHz
-			RCC_CFGR_PPRE1_DIV2 | // PLL_CLK -> APB1 Bus -> 45MHz
-			RCC_CFGR_PPRE2_DIV1; // PLL_CLK -> APB2 Bus -> 90MHz
+			RCC_CFGR_HPRE_DIV1 | // PLL_CLK -> AHB Bus -> 180MHz
+			RCC_CFGR_PPRE1_DIV4 | // PLL_CLK -> APB1 Bus -> 45MHz
+			RCC_CFGR_PPRE2_DIV2; // PLL_CLK -> APB2 Bus -> 90MHz
 
 	RCC -> CFGR |= RCC_CFGR_SW_PLL; // Switch SYSCLK from HSI to PLL
 	while ((RCC -> CFGR & RCC_CFGR_SWS) != RCC_CFGR_SWS_PLL); // wait until switch complete
@@ -111,7 +111,7 @@ void TIM2_CONFIG(void)
 
 uint32_t DWT_TIME(uint32_t cycles, uint32_t factor)
 {
-    double seconds = cycles / 90000000.0; // As SYSCLK = 90 MHz
+    double seconds = cycles / 180000000.0; // As SYSCLK = 180 MHz
     seconds *= factor;
     return (uint32_t)seconds;
 }
@@ -242,14 +242,14 @@ void PROFILE_01_TIM(void)
 
 void PROFILE_03_DWT(void)
 {
-	char* c = "Profiling code speed at 90MHz clock ticks.....\r\n";
+	char* c = "Profiling code speed at 180MHz clock ticks....\r\n";
 	uint32_t T1 = DWT -> CYCCNT;
 	USART2_SEND_STRING(c);
 	uint32_t T2 = DWT -> CYCCNT;
 	uint32_t cycles = T2 - T1;
 	char t[10];
 	CALC_DWT(str5, cycles);
-	double micros = cycles / 90.0;
+	double micros = cycles / 180.0;
 	micros = 480 / micros; // 8 bit sending, 1 start bit, 1/2 stop bits, generally 10 bits
 	micros *= 1e6;
 	CONVERTER((uint32_t)micros, t);
@@ -258,7 +258,7 @@ void PROFILE_03_DWT(void)
 
 void PROFILE_03_TIM(void)
 {
-	char* c = "Profiling code speed at 90MHz clock ticks.....\r\n";
+	char* c = "Profiling code speed at 180MHz clock ticks....\r\n";
 	TIM2 -> CNT = 0;
 	uint32_t T1 = TIM2 -> CNT;
 	USART2_SEND_STRING(c);

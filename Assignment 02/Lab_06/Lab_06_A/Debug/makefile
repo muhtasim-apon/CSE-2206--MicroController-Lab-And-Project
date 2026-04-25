@@ -59,8 +59,8 @@ all: main-build
 main-build: Lab_06_A.elf secondary-outputs
 
 # Tool invocations
-Lab_06_A.elf Lab_06_A.map: $(OBJS) $(USER_OBJS) C:\CSE2-2\cse2206\Assignment\ 02\Lab_06\Lab_06_A\STM32F446RETX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-gcc -o "Lab_06_A.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"C:\CSE2-2\cse2206\Assignment 02\Lab_06\Lab_06_A\STM32F446RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="Lab_06_A.map" -Wl,--gc-sections -static -u_printf_float --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+Lab_06_A.elf Lab_06_A.map: $(OBJS) $(USER_OBJS) E:\2nd\ Year\ 2nd\ Semester\CSE-2206--MicroController-Lab-And-Project\Assignment\ 02\Lab_06\Lab_06_A\STM32F446RETX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-gcc -o "Lab_06_A.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"E:\2nd Year 2nd Semester\CSE-2206--MicroController-Lab-And-Project\Assignment 02\Lab_06\Lab_06_A\STM32F446RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="Lab_06_A.map" -Wl,--gc-sections -static -u_printf_float --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 
