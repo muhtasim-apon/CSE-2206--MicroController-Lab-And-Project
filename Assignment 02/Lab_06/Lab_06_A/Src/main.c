@@ -146,9 +146,11 @@ int main(void)
 		char msg[64];
 		TIM2->CCR1=0;
 			//double time=1000.0f + ((i)*1000)/180.0f;
-			double time =500.0f + ((i)*2000)/180.0f; //-->eta amr servo motor er jonno . mainly sg90
+			//double time =1000f + ((i)*1000+90)/180.0f; //-->eta amr servo motor er jonno . mainly sg90
+		// Standard formula with integer rounding (+90 = +range/2)
+		        double time = 500.0f + ((i * 2000.f) + 90) / 180.0;
 			double CCR=time*3.0f;
-			TIM2->CCR1=CCR;
+			TIM2->CCR1=(uint32_t)CCR;
 		sprintf(msg,"%d           %f           %f\r\n",i,time,CCR);
 		USART2_SendString(msg);
 		delay_ms(500);

@@ -7,15 +7,17 @@
 #define BAUD_RATE	115200UL
 #define MAIN		main
 
-char str0[120] = "[#] | Block Description                       |  Cycles  |    ns    |   us   |  ms  |  s  |  Baud  \r\n";
-char str1[120] = "[1] | Bubble Sort (n = 100) in DWT            |          |          |        |      |     | -\r\n";
-char str2[120] = "    | Bubble Sort (n = 100) in TIM            | -        |          |        |      |     | -\r\n";
-char str5[120] = "[3] | USART2_SendString(48) in DWT            |          |          |        |      |     |        \r\n";
-char str6[120] = "    | USART2_SendString(48) in TIM            | -        |          |        |      |     |        \r\n";
-char str7[120] = "[4] | Integer sq.rt. via Binary Search in DWT |          |          |        |      |     | -\r\n";
-char str8[120] = "    | Integer sq.rt. via Binary Search in TIM | -        |          |        |      |     | -\r\n";
-char str9[120] = "[5] | Byte-by-Byte Memory Copy in DWT         |          |          |        |      |     | -\r\n";
-char str10[120]= "    | Byte-by-Byte Memory Copy in TIM         |          |          |        |      |     | -\r\n";
+char str0[120] = "[#] | Block Description                       |  Cycles  |    ns     |   us   |  ms  |  s  |  Baud  \r\n";
+char str1[120] = "[1] | Bubble Sort (n = 100) in DWT            |          |           |        |      |     | -\r\n";
+char str2[120] = "    | Bubble Sort (n = 100) in TIM            | -        |           |        |      |     | -\r\n";
+char str3[120] = "[2] | delay_ms(100) in DWT                    |          |           |        |      |     | -\r\n";
+char str4[120] = "    | delay_ms(100) in TIM                    | -        |           |        |      |     | -\r\n";
+char str5[120] = "[3] | USART2_SendString(48) in DWT            |          |           |        |      |     |        \r\n";
+char str6[120] = "    | USART2_SendString(48) in TIM            | -        |           |        |      |     |        \r\n";
+char str7[120] = "[4] | Integer sq.rt. via Binary Search in DWT |          |           |        |      |     | -\r\n";
+char str8[120] = "    | Integer sq.rt. via Binary Search in TIM | -        |           |        |      |     | -\r\n";
+char str9[120] = "[5] | Byte-by-Byte Memory Copy in DWT         |          |           |        |      |     | -\r\n";
+char str10[120]= "    | Byte-by-Byte Memory Copy in TIM         | -        |           |        |      |     | -\r\n";
 
 void PLL_CONFIG(void)
 {
@@ -155,15 +157,15 @@ void CALC_DWT(char* str, uint32_t cycles)
 
 	uint32_t t_micros = DWT_TIME(cycles, 1e6);
 	CONVERTER(t_micros, temp);
-	memcpy(&str[70], temp, strlen(temp));
+	memcpy(&str[71], temp, strlen(temp));
 
 	uint32_t t_millis = DWT_TIME(cycles, 1e3);
 	CONVERTER(t_millis, temp);
-	memcpy(&str[79], temp, strlen(temp));
+	memcpy(&str[80], temp, strlen(temp));
 
 	uint32_t t_secs = DWT_TIME(cycles, 1);
 	CONVERTER(t_secs, temp);
-	memcpy(&str[86], temp, strlen(temp));
+	memcpy(&str[87], temp, strlen(temp));
 }
 
 void CALC_TIM(char* str, uint32_t micros)
@@ -176,15 +178,15 @@ void CALC_TIM(char* str, uint32_t micros)
 
 	uint32_t t_micros = TIM_TIME(micros, 1e6);
 	CONVERTER(t_micros, temp);
-	memcpy(&str[70], temp, strlen(temp));
+	memcpy(&str[71], temp, strlen(temp));
 
 	uint32_t t_millis = TIM_TIME(micros, 1e3);
 	CONVERTER(t_millis, temp);
-	memcpy(&str[79], temp, strlen(temp));
+	memcpy(&str[80], temp, strlen(temp));
 
 	uint32_t t_secs = TIM_TIME(micros, 1);
 	CONVERTER(t_secs, temp);
-	memcpy(&str[86], temp, strlen(temp));
+	memcpy(&str[87], temp, strlen(temp));
 }
 
 void SWAP(int *a, int *b)
@@ -219,6 +221,12 @@ int SQRT_BINARY(int i)
 	return root;
 }
 
+void DELAY_MS(uint32_t ms)
+{
+	uint32_t INIT = TIM2 -> CNT;
+	while ((TIM2 -> CNT - INIT) / 1000 != ms);
+}
+
 void PROFILE_01_DWT(void)
 {
 	int arr[100] = {0};
@@ -240,6 +248,25 @@ void PROFILE_01_TIM(void)
 	CALC_TIM(str2, micros);
 }
 
+void PROFILE_02_DWT(void)
+{
+	uint32_t T1 = DWT -> CYCCNT;
+	DELAY_MS(100);
+	uint32_t T2 = DWT -> CYCCNT;
+	uint32_t cycles = T2 - T1;
+	CALC_DWT(str3, cycles);
+}
+
+void PROFILE_02_TIM(void)
+{
+	TIM2 -> CNT = 0;
+	uint32_t T1 = TIM2 -> CNT;
+	DELAY_MS(100);
+	uint32_t T2 = TIM2 -> CNT;
+	uint32_t micros = T2 - T1;
+	CALC_TIM(str4, micros);
+}
+
 void PROFILE_03_DWT(void)
 {
 	char* c = "Profiling code speed at 180MHz clock ticks....\r\n";
@@ -253,7 +280,7 @@ void PROFILE_03_DWT(void)
 	micros = 480 / micros; // 8 bit sending, 1 start bit, 1/2 stop bits, generally 10 bits
 	micros *= 1e6;
 	CONVERTER((uint32_t)micros, t);
-	memcpy(&str5[92], t, strlen(t));
+	memcpy(&str5[93], t, strlen(t));
 }
 
 void PROFILE_03_TIM(void)
@@ -269,7 +296,7 @@ void PROFILE_03_TIM(void)
 	double micro = 480.0 / micros; // 8 bit sending, 1 start bit, 1/2 stop bits, generally 10 bits
 	micro *= 1e6;
 	CONVERTER((uint32_t)micro, t);
-	memcpy(&str6[92], t, strlen(t));
+	memcpy(&str6[93], t, strlen(t));
 }
 
 void PROFILE_04_DWT(void)
@@ -321,6 +348,8 @@ void TABLE_OUT(void)
 	USART2_SEND_STRING(str0);
 	USART2_SEND_STRING(str1);
 	USART2_SEND_STRING(str2);
+	USART2_SEND_STRING(str3);
+	USART2_SEND_STRING(str4);
 	USART2_SEND_STRING(str5);
 	USART2_SEND_STRING(str6);
 	USART2_SEND_STRING(str7);
@@ -344,6 +373,11 @@ int MAIN(void)
 	USART2_SEND_STRING(c1);
 	PROFILE_01_DWT();
 	PROFILE_01_TIM();
+
+	char* c2 = "Task 02: delay_ms(100) for DWT and TIM\r\n";
+	USART2_SEND_STRING(c2);
+	PROFILE_02_DWT();
+	PROFILE_02_TIM();
 
 	char* c3 = "Task 03: USART2 48-Byte Transmission Check\r\n";
 	USART2_SEND_STRING(c3);
