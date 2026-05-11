@@ -212,6 +212,7 @@ int main(void)
 			//PWM_SetDuty(50);
 			USART2_SendString(msg);
 		//breathing_cycle();//wait for 2 seconds
+
 //	while(1)
 //	{
 //	}

@@ -1,9 +1,0 @@
-13:47:31 **** Clean-only build of configuration Debug for project Lab_06_A ****
-make -j12 clean 
-rm -rf ./Startup/startup_stm32f446retx.d ./Startup/startup_stm32f446retx.o
-rm -rf ./Src/main.cyclo ./Src/main.d ./Src/main.o ./Src/main.su ./Src/syscalls.cyclo ./Src/syscalls.d ./Src/syscalls.o ./Src/syscalls.su ./Src/sysmem.cyclo ./Src/sysmem.d ./Src/sysmem.o ./Src/sysmem.su
-rm -rf Lab_06_A.elf Lab_06_A.list Lab_06_A.map default.size.stdout
- 
-
-13:47:32 Build Finished. 0 errors, 0 warnings. (took 520ms)
-
