@@ -5,19 +5,19 @@
 #define pie acos(-1)
 void Tim3_Init(void)
 {
-	RCC->APB1ENR |=RCC_APB1ENR_TIM3EN;//time3 peripheral enable . without it-> readoperation 0 output. write discarded.
+	RCC->APB1ENR |=RCC_APB1ENR_TIM3EN;
 	__NOP();
-	TIM3->CCR1=0; //setting duty cycle intially 0
-	TIM3->CR1=0;//disable time3 counter before configuration. prevent glitching
-	TIM3->PSC=89; // timer -> freq= 1MHz
-	TIM3->ARR=999;//pwm -> freq 1Khz
-	TIM3->CCMR1 &=~(TIM_CCMR1_OC1M); //reset previous mode configuration
+	TIM3->CCR1=0;
+	TIM3->CR1=0;//disable time3 counter before configuration
+	TIM3->PSC=89;
+	TIM3->ARR=999;
+	TIM3->CCMR1 &=~(TIM_CCMR1_OC1M);
 	//TIM3->CCMR1 |=(TIM_CCMR1_OC1M);
-	TIM3->CCMR1 |=(6UL<<TIM_CCMR1_OC1M_Pos);//pwm mode 1
-	TIM3->CCMR1|=TIM_CCMR1_OC1PE;//updates duty cycle at every update event
-	TIM3->CCER|=TIM_CCER_CC1E;//activavte pwm on channel 1
-	TIM3->CCER&=~(TIM_CCER_CC1P);//0-->high polarity (falling edge)-->duty cycle --> led brightness
-	TIM3->CR1|=TIM_CR1_ARPE;//for buffering the ccr values
+	TIM3->CCMR1 |=(6UL<<TIM_CCMR1_OC1M_Pos);
+	TIM3->CCMR1|=TIM_CCMR1_OC1PE;
+	TIM3->CCER|=TIM_CCER_CC1E;
+	TIM3->CCER&=~(TIM_CCER_CC1P);
+	TIM3->CR1|=TIM_CR1_ARPE;
 	TIM3->EGR=TIM_EGR_UG;
 	TIM3->CR1|=TIM_CR1_CEN;
 
@@ -47,7 +47,34 @@ void GPIO_INIT(void)
 	GPIOA->AFR[0] |= (2UL<<24);//value 0010 in 4 bit field of pin 6->enable AF2 MODE
 
 }
-
+//void delay_us(uint32_t us)
+//{
+//	TIM6->CNT=0;
+//	TIM6->SR &=~TIM_SR_UIF;
+//	uint32_t overflow=us/TIM6->ARR;
+//	uint32_t remainder=us%TIM6->ARR;
+//	while(overflow--)
+//	{
+//		while(!(TIM6->SR & TIM_SR_UIF));
+//		TIM6->SR &=~TIM_SR_UIF;
+//	}
+//	TIM6->CNT=0;
+//	while(TIM6->CNT<remainder);
+//}
+//void delay_us(uint32_t us)
+//{
+//	uint32_t overflow=us/65535;
+//	uint32_t remainder=us%65535;
+//	TIM6->CNT=0;
+//	TIM6->SR=0;
+//	while(overflow--)
+//	{
+//		while(!(TIM6->SR & TIM_SR_UIF));
+//		TIM6->SR=0;
+//	}
+//	TIM6->CNT=0;
+//	while(TIM6->CNT< remainder);
+//}
 void delay_us(uint32_t us)
 {
 	uint32_t overflow=us/65536;
@@ -185,5 +212,8 @@ int main(void)
 			//PWM_SetDuty(50);
 			USART2_SendString(msg);
 		//breathing_cycle();//wait for 2 seconds
+//	while(1)
+//	{
+//	}
 
 	}

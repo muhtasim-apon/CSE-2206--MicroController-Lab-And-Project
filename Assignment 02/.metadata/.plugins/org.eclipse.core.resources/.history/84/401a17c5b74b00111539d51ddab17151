@@ -1,0 +1,158 @@
+#include "stm32f446xx.h"
+#include<stdio.h>
+void Tim2_Init(void)
+{
+	RCC->APB1ENR |=RCC_APB1ENR_TIM2EN;
+	__NOP();
+	TIM2->CR1 &=~TIM_CR1_CEN;
+	TIM2->PSC=29;
+	TIM2->ARR=59999;
+	//TAKEN THESE VALUES BECAUSE MORE ARR IS MORE CCR STEPS . RESULTING MORE RESOLUTION ANS PWM SMOOTHNESS .ALSO THIS IS STANDADRD CONFIGURATION FOR 50 Hz PWM GENERATION
+	TIM2->EGR |=TIM_EGR_UG;
+	TIM2->SR=0;
+	TIM2->CNT=0;
+	TIM2->CCMR1 &=~(TIM_CCMR1_OC1M);
+		//TIM2->CCMR1 |=(TIM_CCMR1_OC1M);
+		TIM2->CCMR1 |=(6UL<<TIM_CCMR1_OC1M_Pos);
+		TIM2->CCMR1|=TIM_CCMR1_OC1PE;
+		TIM2->CCER|=TIM_CCER_CC1E;
+		TIM2->CCER&=~(TIM_CCER_CC1P);
+		TIM2->CR1|=TIM_CR1_ARPE;
+	TIM2->CR1 |= TIM_CR1_CEN;
+}
+void Tim6_Init(void)
+{
+	RCC->APB1ENR |= RCC_APB1ENR_TIM6EN;
+	__NOP();
+	TIM6->CR1=0;
+	TIM6->PSC=89;
+	TIM6->ARR=0xFFFF;
+	TIM6->EGR=TIM_EGR_UG;
+	TIM6->SR=0;
+	TIM6->CR1 |=TIM_CR1_CEN;
+}
+void delay_us(uint32_t us)
+{
+	uint32_t overflow=us/65536;
+	uint32_t remainder=us%65536;
+	TIM6->CNT=0;
+	TIM6->SR &=~TIM_SR_UIF;
+	while(overflow--)
+	{
+		while(!(TIM6->SR & TIM_SR_UIF));
+		TIM6->SR &=~TIM_SR_UIF;
+	}
+	TIM6->CNT=0;
+	while(TIM6->CNT< remainder);
+}
+void delay_ms(uint32_t ms)
+{
+	for(int i=0;i<ms;i++)delay_us(1000);
+}
+void GPIO_INIT(void)
+{
+	RCC->AHB1ENR |=RCC_AHB1ENR_GPIOAEN;
+		__NOP();//delay for clock stabilization
+	GPIOA->MODER &=~(3UL<<0);//alternative function mode
+	GPIOA->MODER |=(2UL<<0);
+	GPIOA->OTYPER &=~(1UL<<0);//push pull output type
+	GPIOA->OSPEEDR &= ~(3UL<<0);
+	GPIOA->OSPEEDR |=(3UL<<0);//high speed ensures
+	GPIOA->PUPDR &=~(3UL<<0); //No pull up no pull down mode
+	GPIOA->AFR[0] &= ~(0xF<<0);//clearing bit for pin 6
+	GPIOA->AFR[0] |= (1UL<<0);//value 0010 in 4 bit field of pin 6->enable AF2 MODE
+
+}
+//void convert_angle_to_CCR(uint32_t theta)
+//{
+//	TIM2->CCR1=0;
+//	double time=1000.0f + ((theta)*1000)/180.0f;
+//	double CCR=time*90.0f;
+//	TIME2->CCR1=CCR;
+//}
+void PLL_Config(void)
+{
+	//Enabling fpu unit first
+	SCB->CPACR |=((3UL<<10*2)| (3UL<<11*2));//CPACR ER SOFTWARE KE NIYE KAJ KORE
+	__DSB();//ETA DOFTWARE DIRECT READ INE ER JONNO
+	__ISB();//EKTU INTERRUP O ENABLE KORE DILAM
+    /* 1. Enable HSI (16 MHz) */
+    RCC->CR |= RCC_CR_HSION;
+    while (!(RCC->CR & RCC_CR_HSIRDY));  // Wait until HSI ready
+
+    /* 2. Configure PLL: HSI/16 * 180 / 2 = 90 MHz */
+    RCC->PLLCFGR = (16 << RCC_PLLCFGR_PLLM_Pos)   // PLLM = 16
+                 | (180 << RCC_PLLCFGR_PLLN_Pos)  // PLLN = 180
+                 | (0 << RCC_PLLCFGR_PLLP_Pos)    // PLLP = 2 (00b)
+                 | (4 << RCC_PLLCFGR_PLLQ_Pos)    // PLLQ = 4 (USB/SDIO)
+                 | RCC_PLLCFGR_PLLSRC_HSI;        // Source = HSI
+
+    /* 3. Enable PLL */
+    RCC->CR |= RCC_CR_PLLON;
+    while (!(RCC->CR & RCC_CR_PLLRDY));  // Wait until PLL ready
+
+    /* 4. Configure Flash latency (2 WS for 90 MHz) */
+    FLASH->ACR = FLASH_ACR_ICEN | FLASH_ACR_DCEN | FLASH_ACR_LATENCY_2WS;
+
+    /* 5. Set prescalers: AHB=1, APB1=2, APB2=1 */
+    RCC->CFGR = RCC_CFGR_HPRE_DIV1
+              | RCC_CFGR_PPRE1_DIV2
+              | RCC_CFGR_PPRE2_DIV1;
+
+    /* 6. Switch SYSCLK to PLL */
+    RCC->CFGR |= RCC_CFGR_SW_PLL;
+    while ((RCC->CFGR & RCC_CFGR_SWS) != RCC_CFGR_SWS_PLL);  // Wait until PLL is active
+}
+void USART2_INIT(void)
+{
+	RCC->APB1ENR |=RCC_APB1ENR_USART2EN;
+	__NOP();
+	GPIOA->MODER &=~((3UL <<4 ) | (3UL<<6));
+	GPIOA->MODER |=((2UL<<4) |(2UL<<6));
+	GPIOA->OTYPER &=~((1UL<<2) | (1UL<<3));
+	GPIOA->OSPEEDR &= ~((3UL<<4) | (3UL<<6));
+	GPIOA->OSPEEDR |=((3UL<<4) |(3UL<<6));
+	GPIOA->PUPDR &=~((3UL<<4) |(3UL<<6));
+	GPIOA->AFR[0] &=~((0xF<<8) | (0xF<<12));
+	GPIOA->AFR[0] |=((7<<8) |(7<<12));
+	USART2->BRR=(24<<4)|6;
+	USART2->CR1 |=USART_CR1_UE | USART_CR1_TE| USART_CR1_RE;
+}
+
+void USART2_SendChar(char c)
+{
+	while(!(USART2->SR & USART_SR_TXE));
+	USART2->DR=(uint8_t)c;
+}
+void USART2_SendString(char *str)
+{
+	while(*str)USART2_SendChar(*str++);
+}
+uint8_t USART2_RecChar(char c)
+{
+	while(!(USART2->SR & USART_SR_RXNE));
+	return (uint8_t)(USART2->DR);
+}
+int main(void)
+{
+	PLL_Config();
+	GPIO_INIT();
+	Tim2_Init();
+	Tim6_Init();
+	USART2_INIT();
+	USART2_SendString("Target Angle  Pulse Width(us)  CCR VALUE\r\n");
+	for(int i=0;i<=180;i+=10)
+	{
+		char msg[64];
+		TIM2->CCR1=0;
+			//double time=1000.0f + ((i)*1000)/180.0f;
+			//double time =1000f + ((i)*1000+90)/180.0f; //-->eta amr servo motor er jonno . mainly sg90
+		// Standard formula with integer rounding (+90 = +range/2)
+		        double time = 500.0f + ((i * 2000.f) + 90) / 180.0;
+			double CCR=time*3.0f;
+			TIM2->CCR1=(uint32_t)CCR;
+		sprintf(msg,"%d           %f           %f\r\n",i,time,CCR);
+		USART2_SendString(msg);
+		delay_ms(500);
+	}
+}
