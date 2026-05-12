@@ -1,0 +1,9 @@
+# Eclipse/STM32CubeIDE workspace metadata
+**/.metadata/
+
+# Eclipse index/cache artifacts
+**/*.pdom
+**/*.log
+
+# Temporary/lock files
+**/~$*.docx
