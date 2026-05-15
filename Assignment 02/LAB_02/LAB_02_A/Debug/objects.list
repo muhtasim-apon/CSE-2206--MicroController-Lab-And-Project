@@ -1,11 +1,4 @@
-<<<<<<< HEAD
 "./Src/main.o"
 "./Src/syscalls.o"
 "./Src/sysmem.o"
 "./Startup/startup_stm32f446retx.o"
-=======
-"./Src/main.o"
-"./Src/syscalls.o"
-"./Src/sysmem.o"
-"./Startup/startup_stm32f446retx.o"
->>>>>>> 1728c27369ef9e67d2a3ff2c6587be7f7b0eb2a0
