@@ -323,8 +323,8 @@ void WS2812_SetHue(uint16_t H)
     uint8_t seg = H / 60U;
     uint8_t frac = H % 60U;
 
-    uint8_t q = 255U * (60U - frac) / 60U;
-    uint8_t t = 255U * frac / 60U;
+    uint8_t q = 255U * (60U - frac) / 60U; // q -> decreases high to low (falling brg)
+    uint8_t t = 255U * frac / 60U; // t -> increases low to high (rising brg)
 
     uint8_t r, g, b;
 
@@ -441,8 +441,6 @@ int main(void)
     TIM6_CONFIG();
     TIM1_WS_CONFIG();
     DMA2_WS_CONFIG();
-
-    "LAB 03 (Bare-Metal): Duration Measurement with Code Profiling using USART\r\n\n";
 
     USART2_SendString("LAB 04 (Bare-Metal): WS2812B LED Strip Lighting\r\n");
     WS2812_SetAll(0, 0, 0);
