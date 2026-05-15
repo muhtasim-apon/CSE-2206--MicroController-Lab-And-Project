@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 #include "stm32f446xx.h"
 #include <stdint.h>
 #include <stdio.h>
@@ -483,3 +484,5 @@ int main(void)
     }
     return 0;
 }
+=======
+>>>>>>> 1728c27369ef9e67d2a3ff2c6587be7f7b0eb2a0
