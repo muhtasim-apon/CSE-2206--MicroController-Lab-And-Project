@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 #include "stm32f446xx.h"
 #include <stdint.h>
 #include <stdio.h>
@@ -443,7 +442,7 @@ int main(void)
     TIM1_WS_CONFIG();
     DMA2_WS_CONFIG();
 
-    USART2_SendString("LAB 04 (Bare-Metal): WS2812B LED Strip Lighting\r\n");
+    USART2_SendString("LAB 05 (Bare-Metal): WS2812B LED Strip Lighting\r\n");
     WS2812_SetAll(0, 0, 0);
     delay_ms(100);
 
@@ -484,5 +483,3 @@ int main(void)
     }
     return 0;
 }
-=======
->>>>>>> 1728c27369ef9e67d2a3ff2c6587be7f7b0eb2a0
