@@ -1,0 +1,8 @@
+../Src/main.c:7:6:PLL_CONFIG	4	static
+../Src/main.c:41:6:GPIOA_CONFIG	4	static
+../Src/main.c:59:6:TIM1_CONFIG	4	static
+../Src/main.c:76:6:WS_SEND_BIT	16	static
+../Src/main.c:88:6:DELAY_US	32	static
+../Src/main.c:99:6:WS2812_SET_COLOR	32	static,ignoring_inline_asm
+../Src/main.c:116:6:HSV_SWAP	32	static
+../Src/main.c:170:5:main	8	static

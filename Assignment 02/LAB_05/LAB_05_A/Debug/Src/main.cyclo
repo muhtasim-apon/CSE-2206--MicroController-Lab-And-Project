@@ -1,0 +1,8 @@
+../Src/main.c:7:6:PLL_CONFIG	4
+../Src/main.c:41:6:GPIOA_CONFIG	1
+../Src/main.c:59:6:TIM1_CONFIG	1
+../Src/main.c:76:6:WS_SEND_BIT	3
+../Src/main.c:88:6:DELAY_US	3
+../Src/main.c:99:6:WS2812_SET_COLOR	4
+../Src/main.c:116:6:HSV_SWAP	7
+../Src/main.c:170:5:main	1
