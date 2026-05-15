@@ -92,9 +92,9 @@ void USART2_SEND_STRING(char* str)
 	while(*str) USART2_SEND_CHAR(*str++);
 }
 
-void DWT_CONFIG(void)
+void DWT_CONFIG(void) // Data Watch-point and Trace
 {
-	CoreDebug -> DEMCR |= CoreDebug_DEMCR_TRCENA_Msk; // Enabling the Trace Enable Control
+	CoreDebug -> DEMCR |= CoreDebug_DEMCR_TRCENA_Msk; // Enabling the Trace Enable Control, DEMCR = Debug Exception and Monitor Control Register
 	DWT -> CYCCNT = 0; // Resetting Cycle Counter
 	DWT -> CTRL |= DWT_CTRL_CYCCNTENA_Msk; // Enabling the CYCCNTENA bit for starting count
 }

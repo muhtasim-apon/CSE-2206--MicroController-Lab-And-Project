@@ -4,8 +4,8 @@
 #include <string.h>
 
 #define WS_ARR      224U
-#define WS_T1H      150U
-#define WS_T0H       75U
+#define WS_T1H      144U
+#define WS_T0H       72U
 #define WS_RESET     50U
 #define NUM_LEDS      5U
 #define PWM_BUF_SIZE  ((NUM_LEDS * 24U) + WS_RESET)
