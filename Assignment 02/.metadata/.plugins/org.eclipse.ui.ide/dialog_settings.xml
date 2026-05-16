@@ -9,6 +9,7 @@
 		<item key="SmartImportRootWizardPage.STORE_NESTED_PROJECTS" value="true"/>
 		<item key="SmartImportRootWizardPage.STORE_CONFIGURE_NATURES" value="true"/>
 		<list key="org.eclipse.ui.internal.wizards.datatransfer.SmartImportRootWizardPage.knownSources">
+			<item value="C:\CSE2-2\cse2206\Assignment 02\LAB_03\LAB_03_B"/>
 			<item value="C:\CSE2-2\Assignment 02\LAB_05_A"/>
 			<item value="C:\CSE2-2\cse2206\Assignment 02\LAB_05\LAB_05_A"/>
 			<item value="C:\CSE2-2\cse2206\Assignment 02\LAB_03\LAB_03_A"/>
