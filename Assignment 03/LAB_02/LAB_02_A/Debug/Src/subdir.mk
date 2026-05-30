@@ -22,7 +22,7 @@ C_DEPS += \
 
 # Each subdirectory must supply rules for building sources it contributes
 Src/%.o Src/%.su Src/%.cyclo: ../Src/%.c Src/subdir.mk
-	arm-none-eabi-gcc "$<" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DSTM32 -DSTM32F4 -DSTM32F446RETx -c -I../Inc -I"C:/CSE2-2/cse2206/Assignment 03/LAB_02/LAB_02_A/CMSIS/Include" -I"C:/CSE2-2/cse2206/Assignment 03/LAB_02/LAB_02_A/CMSIS/Device/ST/STM32F4xx/Include" -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"$(@:%.o=%.d)" -MT"$@" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "$@"
+	arm-none-eabi-gcc "$<" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DSTM32 -DSTM32F4 -DSTM32F446RETx -c -I../Inc -I"E:/2nd Year 2nd Semester/CSE-2206--MicroController-Lab-And-Project/Assignment 03/LAB_02/LAB_02_A/CMSIS/Include" -I"E:/2nd Year 2nd Semester/CSE-2206--MicroController-Lab-And-Project/Assignment 03/LAB_02/LAB_02_A/CMSIS/Device/ST/STM32F4xx/Include" -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"$(@:%.o=%.d)" -MT"$@" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "$@"
 
 clean: clean-Src
 
