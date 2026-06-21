@@ -1,4 +1,10 @@
+#include "stm32f446xx.h"
+#include <stdio.h>
+#include <stdint.h>
+#include<string.h>
+
 /*
+ * PIN Layout Diagram in Here
  * Wiring (Arduino headers CN5 / CN6 / CN9):
  * ┌─────────────┬──────────────┬────────────┬──────────┐
  * │ BMP280 Pin  │ Nucleo Label │ Connector  │ MCU Pin  │
@@ -14,22 +20,15 @@
  * SPI1: PA5=SCK, PA6=MISO, PA7=MOSI  (AF5)
  * CS  : PB5 (GPIO output)
  */
-
-#include "stm32f446xx.h"
-#include <stdio.h>
-#include <stdint.h>
-
-/* ------------------------------------------------------------------ */
-/*  BMP280 Register Definitions                                        */
-/* ------------------------------------------------------------------ */
-#define BME280_REG_CHIP_ID   0xD0  //for identifying the sensor, its addr
-#define BME280_REG_RESET     0xE0  //this reg used for software reset, in this addr , have to write 0xB6 for causing reset
-#define BME280_REG_CTRL_MEAS 0xF4  //measurement control register, select oversample and sensor mode
-#define BME280_REG_CONFIG    0xF5  //configuration register. for filter configuration and standby time
-#define BME280_REG_PRESS_MSB 0xF7 //begin of pressure data block . presture and temo start from 0xF7 to 0xFC
-
-#define CHIP_ID_BME280  0x60  //chip id for sensors
-#define CHIP_ID_BMP280  0x58
+//
+//#define BME280_REG_CHIP_ID   0xD0  //for identifying the sensor, its addr
+//#define BME280_REG_RESET     0xE0  //this reg used for software reset, in this addr , have to write 0xB6 for causing reset
+//#define BME280_REG_CTRL_MEAS 0xF4  //measurement control register, select oversample and sensor mode
+//#define BME280_REG_CONFIG    0xF5  //configuration register. for filter configuration and standby time
+//#define BME280_REG_PRESS_MSB 0xF7 //begin of pressure data block . presture and temo start from 0xF7 to 0xFC
+//
+//#define CHIP_ID_BME280  0x60  //chip id for sensors
+//#define CHIP_ID_BMP280  0x58
 
 /* ------------------------------------------------------------------ */
 /*  CS Pin: PB5 → CN9 pin 5 (D4)                                      */
@@ -40,87 +39,149 @@
 /* ------------------------------------------------------------------ */
 /*  Calibration storage  , or calibration constants                                            */
 /* ------------------------------------------------------------------ */
-static uint16_t dig_T1; // this variable -> for temperature coefficients T1
-static  int16_t dig_T2, dig_T3; //similarly constants T2 and T3
-static uint16_t dig_P1; //this is pressure calibration coefficient P1
-static  int16_t dig_P2, dig_P3, dig_P4, dig_P5;
-static  int16_t dig_P6, dig_P7, dig_P8, dig_P9;
-static  int32_t t_fine; //very important , for temp compensation computation. pressure compensation later uses it
+static uint16_t T1; // this variable -> for temperature coefficients T1
+static  int16_t T2, T3; //similarly constants T2 and T3
+static uint16_t P1; //this is pressure calibration coefficient P1
+static  int16_t P2, P3, P4, P5;
+static  int16_t P6, P7, P8, P9;
+static  int32_t t_preq; //very important , for temp compensation computation. pressure compensation later uses it
 // temp is always compensated before pressure
 
-static void delay_ms(uint32_t ms) //180MHz/18000=1ms
+void PLL_CONFIG(void)
 {
-    for (uint32_t i = 0; i < ms * 18000; i++) __asm("NOP");
+    // Configure Flash Latency for PLL_CLK = 180MHz at Access Control Register
+	FLASH -> ACR =
+			FLASH_ACR_ICEN | // Instruction Cache Enable
+			FLASH_ACR_DCEN | // Data Cache Enable
+			FLASH_ACR_PRFTEN | // Flash Pre-fetch Enable for Faster Operation
+			FLASH_ACR_LATENCY_5WS; // Latency of 5 Wait States as per state cover approximately 30MHz
+
+    // initialize the External High-Speed Oscillator as the Clock for PLL (Phase-Locked Loop), external clock works better in case of latency
+	RCC -> CR |= RCC_CR_HSEON;
+	// wait until HSE is initialized
+	while (!(RCC -> CR & RCC_CR_HSERDY));
+
+	// Configuration of PLL
+	RCC -> PLLCFGR =
+			(8 << RCC_PLLCFGR_PLLM_Pos) | // 8MHz HSE -> 1MHz (Pre-scaler)
+			(360 << RCC_PLLCFGR_PLLN_Pos) | // 1MHz to 360MHz (Multiplier) -> PLL VCO Clock
+			(0 << RCC_PLLCFGR_PLLP_Pos) | // 360 to 180MHz -> PLL_CLK or SYSCLK
+			(2 << RCC_PLLCFGR_PLLQ_Pos) | // VCO / 2 -> CLK for USB/SDIO (Not used here)
+			RCC_PLLCFGR_PLLSRC_HSE; // Base Clock Source -> HSE
+
+	// initialize the PLL for operation
+	RCC -> CR |= RCC_CR_PLLON;
+	while (!(RCC -> CR & RCC_CR_PLLRDY));
+
+    // Configure pre-scalers
+    RCC -> CFGR &= ~(RCC_CFGR_HPRE | RCC_CFGR_PPRE1 | RCC_CFGR_PPRE2);
+    RCC -> CFGR |=
+			RCC_CFGR_HPRE_DIV1 | // PLL_CLK -> AHB Bus -> 180MHz
+			RCC_CFGR_PPRE1_DIV4 | // PLL_CLK -> APB1 Bus -> 45MHz
+			RCC_CFGR_PPRE2_DIV2; // PLL_CLK -> APB2 Bus -> 90MHz
+
+    // Switch SYSCLK to PLL
+    RCC -> CFGR &= ~RCC_CFGR_SW;
+    RCC -> CFGR |= RCC_CFGR_SW_PLL;
+    // Wait until PLL is used as system clock
+    while ((RCC->CFGR & RCC_CFGR_SWS) != RCC_CFGR_SWS_PLL);
 }
 
-static void SystemClock_Config(void)
+void GPIO_CONFIG(void)
 {
-    RCC->CR |= RCC_CR_HSEON;
-    while (!(RCC->CR & RCC_CR_HSERDY)); //wait for clk stabilizing
+	 /* Enable clocks for GPIOA, GPIOB, SPI1 */
+	    RCC->AHB1ENR |= RCC_AHB1ENR_GPIOAEN | RCC_AHB1ENR_GPIOBEN;
+	    RCC->APB2ENR |= RCC_APB2ENR_SPI1EN; //via APB2 , SPI enable
 
-    RCC->PLLCFGR = (4U   << RCC_PLLCFGR_PLLM_Pos) //8/4= 2MHz
-                 | (180U << RCC_PLLCFGR_PLLN_Pos) //2*180=360 MHz
-                 | (0U   << RCC_PLLCFGR_PLLP_Pos) //system clk = 360/2=180 MHz
-                 | RCC_PLLCFGR_PLLSRC_HSE; //now src is the hse btw
+	    /* PA2/3 as USART2 TX/RX */
+	    	GPIOA -> MODER &= ~((3UL << 2*2) | (3UL << 3*2)); // Reset MODE Register of GPIOA of PA2, PA3
+	    	GPIOA -> MODER |= ((2UL << 2*2) | (2UL << 3*2)); // Set MODE Register to Alternate-Function Mode for PA2(TX), PA3(RX)
 
-    FLASH->ACR = FLASH_ACR_LATENCY_5WS | FLASH_ACR_PRFTEN //5 wait states. pre-fetch , instruction and data cache enable
-               | FLASH_ACR_ICEN | FLASH_ACR_DCEN;
+	    	GPIOA -> AFR[0] &= ~((0xF << 2*4) | (0xF << 3*4)); // Clearing the AFR Register Low for PA2, PA3 (each take 4 bits)
+	    	GPIOA -> AFR[0] |= ((7UL << 2*4) | (7UL << 3*4)); // Set the AFR Register Low in PA2, PA3 Position to USART2 TX/RX
 
-    RCC->CFGR = RCC_CFGR_HPRE_DIV1  //AHB=180/1
-              | RCC_CFGR_PPRE1_DIV4 //APB1=180/4=45
-              | RCC_CFGR_PPRE2_DIV2; //APB2=180/2=90
+	    	GPIOA -> OTYPER &= ~((1UL << 2) | (1UL << 3)); // Set output type to push-pull -> 0b0
+	    	GPIOA -> OSPEEDR |= ((3UL << 2*2) | (3UL << 3*2)); // Set Output Speed at very high -> 0b11
+	    	GPIOA -> PUPDR &= ~((3UL << 2*2) | (3UL << 3*2)); // Set pull-up pull down to no pull-up no pull-down -> 0b00
 
-    RCC->CR |= RCC_CR_PLLON;
-    while (!(RCC->CR & RCC_CR_PLLRDY));
+	 /* ----- PA5=SCK, PA6=MISO, PA7=MOSI — Alternate Function 5 ---- */
+	       GPIOA->MODER   |= (2U << (5*2)) | (2U << (6*2)) | (2U << (7*2)); //as alternate functions
+	       GPIOA->AFR[0]  |= (5U << (5*4)) | (5U << (6*4)) | (5U << (7*4)); //AF5 for SP1 BTW
+	       GPIOA->OSPEEDR |= (3U << (5*2)) | (3U << (6*2)) | (3U << (7*2)); //very high speed ensures shaper signals and better spi timing
 
-    RCC->CFGR |= RCC_CFGR_SW_PLL; //switch to clk src as pll
-    while ((RCC->CFGR & RCC_CFGR_SWS) != RCC_CFGR_SWS_PLL); //switch status to pll is on till wait
+	    /* ----- PB5 — CS (GPIO output, push-pull, high speed) so PB5 , AS CHip select---------- */
+	           GPIOB->MODER   |=  (1U << (5*2));   /* output */
+	           GPIOB->OTYPER  &= ~(1U << 5);       /* push-pull --> output hight / low actively */
+	           GPIOB->OSPEEDR |=  (3U << (5*2));   /* high speed */
+	           GPIOB->PUPDR   &= ~(3U << (5*2));   /* no pull --> np internal resistor needed */
+
+
 }
 
-static void UART_Config(void)
-{
-    RCC->AHB1ENR |= RCC_AHB1ENR_GPIOAEN;
-    RCC->APB1ENR |= RCC_APB1ENR_USART2EN;
-    GPIOA->MODER   &= ~(1U << (2*2));
-    GPIOA->MODER   |= (2U << (2*2));
-    GPIOA->AFR[0]  |= (7U << (2*4));
-    GPIOA->OSPEEDR &= ~(3U << (2*2));
-    GPIOA->OSPEEDR |= (3U << (2*2));
 
-    USART2->BRR = (24U << 4) | 7U;
-    USART2->CR1 = USART_CR1_UE | USART_CR1_TE;
+void TIM6_CONFIG(void)
+{
+    RCC -> APB1ENR |= RCC_APB1ENR_TIM6EN; // Enable TIM6 for delay count
+    __NOP(); __NOP(); // Wait until ready
+
+    TIM6 -> CR1 &= ~TIM_CR1_CEN; // Disable Counter for safety
+    TIM6 -> PSC = 89U; // Pre-scaler to feed onto clock. f(TIM6) = 90/(89+1) MHz = 1MHz, per tick = 1us
+    TIM6 -> ARR = 0xFFFFU; // Auto Reload-Register to Free Count Mode, max value set
+    TIM6 -> EGR = TIM_EGR_UG; // Update PSC and ARR onto shadow registers immediately
+    TIM6 -> SR = 0U; // Status Flags set to 0
+    TIM6 -> CR1 |= TIM_CR1_CEN; // Enable Counter
 }
 
-static void UART_Print(const char *s)
+void delay_us(uint16_t us)
 {
-    while (*s) {
-        while (!(USART2->SR & USART_SR_TXE));
-        USART2->DR = (uint8_t)(*s++);
+    TIM6 -> CNT = 0U;
+    while ((uint16_t)TIM6 -> CNT < us);
+}
+
+void delay_ms(uint32_t ms)
+{
+    for (uint32_t i = 0; i < ms; i++)
+    {
+        delay_us(1000U);
     }
 }
+
+void USART2_CONFIG(void)
+{
+	RCC -> APB1ENR |= RCC_APB1ENR_USART2EN; // clock sent to USART2 Ports
+	__NOP(); // delay for clock initiation
+
+	/*
+	USARTDIV = 45000000 / (16 * 115200)
+			 ≈ 24.4140625
+	Mantissa = 24
+	Fraction = 0.4140625 * 16 ≈ 7
+	*/
+	USART2 -> BRR = (24 << 4) | 7;
+
+	// Enable USART2
+    USART2 -> CR1 = USART_CR1_TE | USART_CR1_UE;
+}
+
+void USART2_SendString(const char *s)
+{
+    while (*s)
+    {
+        while (!(USART2 -> SR & USART_SR_TXE));
+        USART2 -> DR = (uint8_t)(*s++);
+    }
+    while (!(USART2->SR & USART_SR_TC));
+}
+
 
 /* ------------------------------------------------------------------ */
 /*  SPI1 + CS (PB5)                                                    */
 /* ------------------------------------------------------------------ */
 static void SPI_Config(void)
 {
-    /* Enable clocks for GPIOA, GPIOB, SPI1 */
-    RCC->AHB1ENR |= RCC_AHB1ENR_GPIOAEN | RCC_AHB1ENR_GPIOBEN;
-    RCC->APB2ENR |= RCC_APB2ENR_SPI1EN; //via APB2 , SPI enable
-
-    /* ----- PB5 — CS (GPIO output, push-pull, high speed) so PB5 , AS CHip select---------- */
-    GPIOB->MODER   |=  (1U << (5*2));   /* output */
-    GPIOB->OTYPER  &= ~(1U << 5);       /* push-pull --> output hight / low actively */
-    GPIOB->OSPEEDR |=  (3U << (5*2));   /* high speed */
-    GPIOB->PUPDR   &= ~(3U << (5*2));   /* no pull --> np internal resistor needed */
     CS_HIGH();                           /* deselect sensor bmp280 btw , otherwise sensor will assume communaction already started */
 
-    /* ----- PA5=SCK, PA6=MISO, PA7=MOSI — Alternate Function 5 ---- */
-    GPIOA->MODER   |= (2U << (5*2)) | (2U << (6*2)) | (2U << (7*2)); //as alternate functions
-    GPIOA->AFR[0]  |= (5U << (5*4)) | (5U << (6*4)) | (5U << (7*4)); //AF5 for SP1 BTW
-    GPIOA->OSPEEDR |= (3U << (5*2)) | (3U << (6*2)) | (3U << (7*2)); //very high speed ensures shaper signals and better spi timing
-
-    /* SPI1: Master, SW-NSS, CPOL=0 CPHA=0, fPCLK/32 ≈ 2.8 MHz */
+     /* SPI1: Master, SW-NSS, CPOL=0 CPHA=0, fPCLK/32 ≈ 2.8 MHz */
     SPI1->CR1 = SPI_CR1_MSTR //enabling master mode stm-->master and bmp -->slave
               | SPI_CR1_SSM /*software slave management. Normally SPI hardware manages NSS pin. Here we manually use PB5 as CS.*/
               | SPI_CR1_SSI //internal nss signal set high. otherwise mode faulit will appera
@@ -193,7 +254,7 @@ static void Load_Calibration(void)
     uint8_t c[24]; //24 bytes actually
     SPI_ReadBurst(0x88, c, 24); //24 bytes calibration block
 
-    dig_T1 = (uint16_t)(c[1]  << 8 | c[0]);
+    T1 = (uint16_t)(c[1]  << 8 | c[0]);
     /*
      * Combine bytes.
      * Suppose:
@@ -207,18 +268,18 @@ static void Load_Calibration(void)
      * OR Low Byte
      * Same logic for all coefficients.
      */
-    dig_T2 =  (int16_t)(c[3]  << 8 | c[2]);
-    dig_T3 =  (int16_t)(c[5]  << 8 | c[4]);
+    T2 =  (int16_t)(c[3]  << 8 | c[2]);
+    T3 =  (int16_t)(c[5]  << 8 | c[4]);
 //these values are unique for every sensor
-    dig_P1 = (uint16_t)(c[7]  << 8 | c[6]);
-    dig_P2 =  (int16_t)(c[9]  << 8 | c[8]);
-    dig_P3 =  (int16_t)(c[11] << 8 | c[10]);
-    dig_P4 =  (int16_t)(c[13] << 8 | c[12]);
-    dig_P5 =  (int16_t)(c[15] << 8 | c[14]);
-    dig_P6 =  (int16_t)(c[17] << 8 | c[16]);
-    dig_P7 =  (int16_t)(c[19] << 8 | c[18]);
-    dig_P8 =  (int16_t)(c[21] << 8 | c[20]);
-    dig_P9 =  (int16_t)(c[23] << 8 | c[22]);
+    P1 = (uint16_t)(c[7]  << 8 | c[6]);
+    P2 =  (int16_t)(c[9]  << 8 | c[8]);
+    P3 =  (int16_t)(c[11] << 8 | c[10]);
+    P4 =  (int16_t)(c[13] << 8 | c[12]);
+    P5 =  (int16_t)(c[15] << 8 | c[14]);
+    P6 =  (int16_t)(c[17] << 8 | c[16]);
+    P7 =  (int16_t)(c[19] << 8 | c[18]);
+    P8 =  (int16_t)(c[21] << 8 | c[20]);
+    P9 =  (int16_t)(c[23] << 8 | c[22]);
 }
 
 /* ------------------------------------------------------------------ */
@@ -230,32 +291,32 @@ static void Load_Calibration(void)
 static int32_t Compensate_Temperature(int32_t adc_T)
 {
     int32_t var1, var2;
-    var1 = ((((adc_T >> 3) - ((int32_t)dig_T1 << 1)))
-             * ((int32_t)dig_T2)) >> 11; //part of calibration eqtn
-    var2 = (((((adc_T >> 4) - ((int32_t)dig_T1))
-             * ((adc_T >> 4) - ((int32_t)dig_T1))) >> 12)
-             * ((int32_t)dig_T3)) >> 14;
-    t_fine = var1 + var2;//VVI-> t_fine is the internal calibrated temp
-    return (t_fine * 5 + 128) >> 8; //convert into 0.01 degree Celcius units
+    var1 = ((((adc_T >> 3) - ((int32_t)T1 << 1)))
+             * ((int32_t)T2)) >> 11; //part of calibration eqtn
+    var2 = (((((adc_T >> 4) - ((int32_t)T1))
+             * ((adc_T >> 4) - ((int32_t)T1))) >> 12)
+             * ((int32_t)T3)) >> 14;
+    t_preq = var1 + var2;//VVI-> t_fine is the internal calibrated temp
+    return (t_preq * 5 + 128) >> 8; //convert into 0.01 degree Celcius units
 }
 
 /* Returns pressure in Pa */
 static uint32_t Compensate_Pressure(int32_t adc_P)
 {
     int64_t var1, var2, p;
-    var1 = ((int64_t)t_fine) - 128000;
-    var2 = var1 * var1 * (int64_t)dig_P6;
-    var2 = var2 + ((var1 * (int64_t)dig_P5) << 17);
-    var2 = var2 + (((int64_t)dig_P4) << 35);
-    var1 = ((var1 * var1 * (int64_t)dig_P3) >> 8)
-         + ((var1 * (int64_t)dig_P2) << 12);
-    var1 = (((((int64_t)1) << 47) + var1)) * ((int64_t)dig_P1) >> 33;
+    var1 = ((int64_t)t_preq) - 128000;
+    var2 = var1 * var1 * (int64_t)P6;
+    var2 = var2 + ((var1 * (int64_t)P5) << 17);
+    var2 = var2 + (((int64_t)P4) << 35);
+    var1 = ((var1 * var1 * (int64_t)P3) >> 8)
+         + ((var1 * (int64_t)P2) << 12);
+    var1 = (((((int64_t)1) << 47) + var1)) * ((int64_t)P1) >> 33;
     if (var1 == 0) return 0; //prevent divide by 0
     p    = 1048576 - adc_P;
     p    = (((p << 31) - var2) * 3125) / var1;
-    var1 = (((int64_t)dig_P9) * (p >> 13) * (p >> 13)) >> 25;
-    var2 = (((int64_t)dig_P8) * p) >> 19;
-    p    = ((p + var1 + var2) >> 8) + (((int64_t)dig_P7) << 4);
+    var1 = (((int64_t)P9) * (p >> 13) * (p >> 13)) >> 25;
+    var2 = (((int64_t)P8) * p) >> 19;
+    p    = ((p + var1 + var2) >> 8) + (((int64_t)P7) << 4);
     return (uint32_t)p / 256;
 }
 
@@ -264,9 +325,9 @@ static uint32_t Compensate_Pressure(int32_t adc_P)
 /* ------------------------------------------------------------------ */
 static void Sensor_Init(void)
 {
-    SPI_WriteByte(BME280_REG_RESET, 0xB6);   /* soft reset, write 0xB6 to 0xE0 */
+    SPI_WriteByte(0xE0, 0xB6);   /* soft reset, write 0xB6 to 0xE0 */
     delay_ms(10); //for reset completion
-    SPI_WriteByte(BME280_REG_CONFIG, 0x10);  /* IIR filter = 2x . filter coefiicient for reducing noise*/
+    SPI_WriteByte(0xF5, 0x10);  /* IIR filter = 2x . filter coefiicient for reducing noise*/
 }
 
 /* ------------------------------------------------------------------ */
@@ -282,7 +343,7 @@ static void Trigger_Measurement(void)
 	 * Take one measurement
 	 * Return to sleep
 	 */
-    SPI_WriteByte(BME280_REG_CTRL_MEAS, 0x57);
+    SPI_WriteByte(0xF4, 0x57);
 
     /* Poll status bit[3] (measuring) until clear (~40 ms max) */
     uint32_t timeout = 200;
@@ -299,7 +360,7 @@ static void Read_TempPressure(int32_t *temp_c100, uint32_t *press_pa)
 
     /* Burst-read 0xF7..0xFC (6 bytes): press[19:0] + temp[19:0] */
     uint8_t raw[6]; //its a buffer
-    SPI_ReadBurst(BME280_REG_PRESS_MSB, raw, 6);
+    SPI_ReadBurst(0xF7, raw, 6);
     /*
      * F7 Pressure MSB
      * F8 Pressure LSB
@@ -332,64 +393,19 @@ static void Read_TempPressure(int32_t *temp_c100, uint32_t *press_pa)
     *press_pa  = Compensate_Pressure(adc_P);
 }
 
-//int main(void)
-//{
-//    char msg[80];
-//
-//    SystemClock_Config();
-//    UART_Config();
-//    SPI_Config();
-//    delay_ms(100);
-//
-//    /* Detect sensor */
-//    uint8_t chip_id = SPI_ReadByte(BME280_REG_CHIP_ID);
-//    if (chip_id == CHIP_ID_BME280)
-//        UART_Print("BME280 detected.\r\n");
-//    else if (chip_id == CHIP_ID_BMP280)
-//        UART_Print("BMP280 detected.\r\n");
-//    else {
-//        sprintf(msg, "Unknown chip ID: 0x%02X — check wiring!\r\n", chip_id);
-//        UART_Print(msg);
-//        while (1);
-//    }
-//
-//    Load_Calibration();
-//    Sensor_Init();
-//    UART_Print("Calibration loaded. Starting readings...\r\n\r\n");
-//
-//    while (1)
-//    {
-//        int32_t  temp;
-//        uint32_t press;
-//
-//        Read_TempPressure(&temp, &press);
-//
-//        /* temp in 0.01 °C → split integer + fraction */
-//        int32_t t_int  =  temp / 100;
-//        int32_t t_frac = (temp < 0 ? -temp : temp) % 100;
-//
-//        /* pressure in Pa → hPa with 2 decimal places */
-//        uint32_t p_int  = press / 100;
-//        uint32_t p_frac = press % 100;
-//
-//        sprintf(msg, "Temp: %ld.%02ld C   Pressure: %lu.%02lu hPa\r\n",
-//                (long)t_int, (long)t_frac,
-//                (unsigned long)p_int, (unsigned long)p_frac);
-//        UART_Print(msg);
-//
-//        delay_ms(1000);
-//    }
-//}
+
 int main(void)
 {
-    char msg[256];
+    char msg[512];
 
-    SystemClock_Config();
-    UART_Config();
+    PLL_CONFIG();
+    GPIO_CONFIG();
+    TIM6_CONFIG();
+    USART2_CONFIG();
     SPI_Config();
     delay_ms(100);
 
-    UART_Print(
+    USART2_SendString(
         "\r\n"
         "============================================================\r\n"
         "              BMP280 ENVIRONMENT MONITOR\r\n"
@@ -400,13 +416,13 @@ int main(void)
         "============================================================\r\n"
     );
 
-    uint8_t chip_id = SPI_ReadByte(BME280_REG_CHIP_ID);
+    uint8_t chip_id = SPI_ReadByte(0xD0);
 
-    if (chip_id == CHIP_ID_BME280)
-        UART_Print(" Device Detected : BME280\r\n");
+    if (chip_id == 0x60)
+    	USART2_SendString(" Device Detected : BME280\r\n");
 
-    else if (chip_id == CHIP_ID_BMP280)
-        UART_Print(" Device Detected : BMP280\r\n");
+    else if (chip_id == 0x58)
+    	USART2_SendString(" Device Detected : BMP280\r\n");
 
     else
     {
@@ -417,7 +433,7 @@ int main(void)
                 " Check SPI Connections\r\n",
                 chip_id);
 
-        UART_Print(msg);
+        USART2_SendString(msg);
 
         while (1);
     }
@@ -425,7 +441,7 @@ int main(void)
     Load_Calibration();
     Sensor_Init();
 
-    UART_Print(
+    USART2_SendString(
         " Calibration Data Loaded Successfully\r\n"
         " Sensor Initialization Complete\r\n"
         "============================================================\r\n"
@@ -459,8 +475,9 @@ int main(void)
                 (unsigned long)p_int,
                 (unsigned long)p_frac);
 
-        UART_Print(msg);
+        USART2_SendString(msg);
 
         delay_ms(1000);
     }
 }
+
