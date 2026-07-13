@@ -536,7 +536,7 @@ int main(void)
     delay_ms(5000);
 
     USART2_SendString("============================================================\r\n");
-    USART2_SendString("[6] Temperature and Pressure Record per Second...\r\n");
+    USART2_SendString("[6] Temperature and Pressure Record per Second.. (Bare-metal)\r\n");
     USART2_SendString("============================================================\r\n");
     USART2_SendString("|  Temperature (°C)  |  Pressure (hPa)  |  Humidity (%RH)  |\r\n");
     while (1) {
