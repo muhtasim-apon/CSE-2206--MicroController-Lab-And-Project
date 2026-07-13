@@ -6,17 +6,12 @@
 /*
  * PIN Layout Diagram in Here
  * Wiring (Arduino headers CN5 / CN6 / CN9):
- * ┌─────────────┬──────────────┬────────────┬──────────┐
- * │ BMP280 Pin  │ Nucleo Label │ Connector  │ MCU Pin  │
- * ├─────────────┼──────────────┼────────────┼──────────┤
- * │ VCC         │ 3V3          │ CN6 pin 4  │  —       │
- * │ GND         │ GND          │ CN6 pin 6  │  —       │
- * │ SCL         │ D13          │ CN5 pin 6  │  PA5     │
- * │ SDA (MOSI)  │ D11          │ CN5 pin 4  │  PA7     │
- * │ SDO (MISO)  │ D12          │ CN5 pin 5  │  PA6     │
- * │ CSB (CS)    │ D4           │ CN9 pin 5  │  PB5     │
- * └─────────────┴──────────────┴────────────┴──────────┘
- *
+ * VCC - 3V3 Pin on Nucleo
+ * GND - GND Pin on Nucleo
+ * SCL - SCL/D13 on Nucleo
+ * SDA - SDA/D11 on Nucleo
+ * CSB - D4(PB5)
+ * SDO - D12(PA6)
  * SPI1: PA5=SCK, PA6=MISO, PA7=MOSI  (AF5)
  * CS  : PB5 (GPIO output)
  */
