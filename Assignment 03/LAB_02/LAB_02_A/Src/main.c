@@ -20,12 +20,18 @@
 
 #define BME_P280_REGISTER_CHIP_ID      				0xD0
 #define BME_P280_REGISTER_RESET        				0xE0
+#define BME_P280_REGISTER_CTRL_HUM   				0xF2
 #define BME_P280_REGISTER_STATUS       				0xF3
 #define BME_P280_REGISTER_CONTROL_MEASURE    		0xF4
 #define BME_P280_REGISTER_CONFIGURE       			0xF5
 #define BME_P280_REGISTER_PRESSURE_MSB    			0xF7
+#define BME_P280_REGISTER_HUM_MSB     				0xFD
+#define BME_P280_REGISTER_HUM_LSB     				0xFE
 #define BME_P280_REGISTER_CALIBRATION_START  		0x88
+#define BME_P280_REGISTER_HUM_CALIB   				0xA1   // extra calibration byte
+#define BME_P280_REGISTER_HUM_CALIB2  				0xE1   // block of humidity calibration
 #define BME_P280_RESET_VALUE      					0xB6
+#define BME_P280_CTRL_HUM_VALUE      				0x01   // oversampling x1 (minimum)
 #define BME_P280_CONTROL_MEASURE_VALUE    			((2U << 5) | (5U << 2) | 3U)   // Decodes to 0x57
 #define BME_P280_CONFIGURE_VALUE       				((4U << 5) | (4U << 2))        // Decodes to 0x90
 
@@ -50,6 +56,12 @@ typedef struct {
     int16_t  PRESS_7;
     int16_t  PRESS_8;
     int16_t  PRESS_9;
+    uint8_t  HUM_1;
+    int16_t  HUM_2;
+    uint8_t  HUM_3;
+    int16_t  HUM_4;
+    int16_t  HUM_5;
+    int8_t   HUM_6;
 } BME_P280_CALIBRATION;
 
 static BME_P280_CALIBRATION CALIBRATION;
@@ -328,6 +340,16 @@ void BME_P280_CALIBRATION_READ(void)
     CALIBRATION.PRESS_7 = (int16_t) ((CALIB_VAL[19] << 8) | CALIB_VAL[18]);
     CALIBRATION.PRESS_8 = (int16_t) ((CALIB_VAL[21] << 8) | CALIB_VAL[20]);
     CALIBRATION.PRESS_9 = (int16_t) ((CALIB_VAL[23] << 8) | CALIB_VAL[22]);
+
+    CALIBRATION.HUM_1 = I2C_READ_BYTE(BME_P280_REGISTER_HUM_CALIB);
+	uint8_t humCalib[7];
+	I2C_READ_BYTES(BME_P280_REGISTER_HUM_CALIB2, humCalib, 7);
+
+	CALIBRATION.HUM_2 = (int16_t)((humCalib[1] << 8) | humCalib[0]);
+	CALIBRATION.HUM_3 = humCalib[2];
+	CALIBRATION.HUM_4 = (int16_t)((humCalib[3] << 4) | (humCalib[4] & 0x0F));
+	CALIBRATION.HUM_5 = (int16_t)((humCalib[5] << 4) | (humCalib[4] >> 4));
+	CALIBRATION.HUM_6 = (int8_t)humCalib[6];
 }
 
 void BME_P280_INIT(void)
@@ -340,6 +362,8 @@ void BME_P280_INIT(void)
     // Value 0x90 = filter coefficient x16, standby time 125 ms
     I2C_WRITE_BYTE(BME_P280_REGISTER_CONFIGURE, BME_P280_CONFIGURE_VALUE);
     delay_ms(2); // Short delay for register update
+    I2C_WRITE_BYTE(BME_P280_REGISTER_CTRL_HUM, BME_P280_CTRL_HUM_VALUE);
+    delay_ms(2);
 
     // 3. Configure measurement control (oversampling + mode)
     // Value 0x57 = Temp oversampling x2, Pressure oversampling x5, Normal mode
@@ -406,40 +430,61 @@ uint32_t BME_P280_BOSCH_PRESS_COMPENSATE(int32_t adc_P)
     return (uint32_t)(p >> 8);
 }
 
-void BME_P280_TEMP_AND_PRESS(void)
+uint32_t BME_P280_BOSCH_HUM_COMPENSATE(int32_t adc_H)
+{
+    int32_t v_x1_u32r;
+
+    v_x1_u32r = t_fine - ((int32_t)76800);
+    v_x1_u32r = (((((adc_H << 14) - (((int32_t)CALIBRATION.HUM_4) << 20)
+                  - (((int32_t)CALIBRATION.HUM_5) * v_x1_u32r)) + ((int32_t)16384)) >> 15)
+                  * ((((((v_x1_u32r * ((int32_t)CALIBRATION.HUM_6)) >> 10)
+                  * (((v_x1_u32r * ((int32_t)CALIBRATION.HUM_3)) >> 11) + ((int32_t)32768))) >> 10)
+                  + ((int32_t)2097152)) * ((int32_t)CALIBRATION.HUM_2) + 8192)) >> 14;
+
+    v_x1_u32r = (v_x1_u32r - (((((v_x1_u32r >> 15) * (v_x1_u32r >> 15)) >> 7)
+                  * ((int32_t)CALIBRATION.HUM_1)) >> 4));
+
+    v_x1_u32r = (v_x1_u32r < 0 ? 0 : v_x1_u32r);
+    v_x1_u32r = (v_x1_u32r > 419430400 ? 419430400 : v_x1_u32r);
+
+    return (uint32_t)(v_x1_u32r >> 12); // result in %RH * 1024
+}
+
+void BME_P280_TEMP_PRESS_HUM(void)
 {
     char MESSAGE[120];
-    uint8_t VALUE[6];
+    uint8_t VALUE[8];
 
-    I2C_READ_BYTES(BME_P280_REGISTER_PRESSURE_MSB, VALUE, 6);
+    I2C_READ_BYTES(BME_P280_REGISTER_PRESSURE_MSB, VALUE, 8);
 
-    int32_t P = ((int32_t)VALUE[0] << 12)
-                  | ((int32_t)VALUE[1] <<  4)
-                  | ((int32_t)VALUE[2] >>  4);
-
-    int32_t T = ((int32_t)VALUE[3] << 12)
-                  | ((int32_t)VALUE[4] <<  4)
-                  | ((int32_t)VALUE[5] >>  4);
+    int32_t P = ((int32_t)VALUE[0] << 12) | ((int32_t)VALUE[1] << 4) | ((int32_t)VALUE[2] >> 4);
+    int32_t T = ((int32_t)VALUE[3] << 12) | ((int32_t)VALUE[4] << 4) | ((int32_t)VALUE[5] >> 4);
+    int32_t H = ((int32_t)VALUE[6] << 8) | VALUE[7];
 
     int32_t TEMP_BASIC = BME_P280_BOSCH_TEMP_COMPENSATE(T);
     uint32_t PRESSURE_PASCAL = BME_P280_BOSCH_PRESS_COMPENSATE(P);
+    uint32_t HUMIDITY_BASIC = BME_P280_BOSCH_HUM_COMPENSATE(H);
 
     int32_t TEMP_FINAL = TEMP_BASIC / 100;
     int32_t TEMP_FRACTION = (TEMP_BASIC < 0 ? -TEMP_BASIC : TEMP_BASIC) % 100;
     uint32_t PRESSURE_HECTO = PRESSURE_PASCAL / 100;
     uint32_t PRESSURE_HECTO_FRACTION = PRESSURE_PASCAL % 100;
+    uint32_t HUMIDITY_FINAL = HUMIDITY_BASIC / 1024;
+    uint32_t HUMIDITY_FRACTION = (HUMIDITY_BASIC % 1024) * 100 / 1024;
 
-    sprintf(MESSAGE, "|       %6ld.%02ld°C           |      %6lu.%02lu hPa       |\r\n",
-			(long)TEMP_FINAL, (long)TEMP_FRACTION,
-			(unsigned long)PRESSURE_HECTO, (unsigned long)PRESSURE_HECTO_FRACTION);
-	USART2_SendString(MESSAGE);
+    sprintf(MESSAGE, "|  %6ld.%02ld°C       |  %6lu.%02lu hPa   |   %3lu.%02lu %%RH     |\r\n",
+            (long)TEMP_FINAL, (long)TEMP_FRACTION,
+            (unsigned long)PRESSURE_HECTO, (unsigned long)PRESSURE_HECTO_FRACTION,
+            (unsigned long)HUMIDITY_FINAL, (unsigned long)HUMIDITY_FRACTION);
+
+    USART2_SendString(MESSAGE);
 }
 
 void SENSOR_CHECK(void)
 {
     char MESSAGE[80];
 
-    USART2_SendString("==========================================================\r\n");
+    USART2_SendString("============================================================\r\n");
     USART2_SendString("[1] Sending Slave Address (0x76) and checking ACK...\r\n");
     if (!I2C_DEVICE_ALIVE()) {
         USART2_SendString("[!] ACK not received. Going idle...\r\n");
@@ -448,19 +493,16 @@ void SENSOR_CHECK(void)
     USART2_SendString("[*] Device ACK received...\r\n");
     delay_ms(5000);
 
-    USART2_SendString("==========================================================\r\n");
+    USART2_SendString("============================================================\r\n");
     USART2_SendString("[2] Reading chip ID register (0xD0)...\r\n");
     uint8_t id = I2C_READ_BYTE(BME_P280_REGISTER_CHIP_ID);
     sprintf(MESSAGE, "Raw value: 0x%02X\r\n", id);
     USART2_SendString(MESSAGE);
-    USART2_SendString("==========================================================\r\n");
+    USART2_SendString("============================================================\r\n");
 
     USART2_SendString("[3] Identifying the sensor (BME280 or BMP280)...\r\n");
     if (id == CHIP_ADDRESS_BME280)
-    {
         USART2_SendString("[*] BME280 detected (has humidity)\r\n");
-        USART2_SendString("[!] Humidity is not checked in this code...\r\n");
-    }
     else if (id == CHIP_ADDRESS_BMP280)
     	USART2_SendString("[*] BMP280 detected\r\n");
     else
@@ -469,7 +511,7 @@ void SENSOR_CHECK(void)
         USART2_SendString(MESSAGE);
         while (1);
     }
-    USART2_SendString("==========================================================\r\n");
+    USART2_SendString("============================================================\r\n");
 }
 
 int main(void)
@@ -486,19 +528,19 @@ int main(void)
     USART2_SendString("[4] Reading Chip Calibration Factors...\r\n");
     BME_P280_CALIBRATION_READ();
     USART2_SendString("Calibration Factors found and loaded...\r\n");
-    USART2_SendString("==========================================================\r\n");
+    USART2_SendString("============================================================\r\n");
 
     USART2_SendString("[5] Configuring BME/P280 in Normal Mode...\r\n");
     BME_P280_INIT();
     USART2_SendString("BME/P Ready for Operation...\r\n");
     delay_ms(5000);
 
-    USART2_SendString("==========================================================\r\n");
+    USART2_SendString("============================================================\r\n");
     USART2_SendString("[6] Temperature and Pressure Record per Second...\r\n");
-    USART2_SendString("==========================================================\r\n");
-    USART2_SendString("|       Temperature (°C)      |      Pressure (hPa)      |\r\n");
+    USART2_SendString("============================================================\r\n");
+    USART2_SendString("|  Temperature (°C)  |  Pressure (hPa)  |  Humidity (%RH)  |\r\n");
     while (1) {
-        BME_P280_TEMP_AND_PRESS();
+        BME_P280_TEMP_PRESS_HUM();
         delay_ms(1000);
     }
 }
