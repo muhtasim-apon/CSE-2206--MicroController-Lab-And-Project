@@ -394,9 +394,62 @@ static void Read_TempPressure(int32_t *temp_c100, uint32_t *press_pa)
 }
 
 
+static void Sensor_Check(uint8_t *out_chip_id)
+{
+    char msg[80];
+
+    USART2_SendString("==========================================================\r\n");
+    USART2_SendString("[1] Sending CS Low and checking device response...\r\n");
+    uint8_t chip_id = SPI_ReadByte(0xD0);
+    if (chip_id != 0x60 && chip_id != 0x58)
+    {
+        USART2_SendString("[!] No valid response received. Going idle...\r\n");
+        while (1);
+    }
+    USART2_SendString("[*] Device response received...\r\n");
+    delay_ms(5000);
+
+    USART2_SendString("==========================================================\r\n");
+    USART2_SendString("[2] Reading chip ID register (0xD0)...\r\n");
+    sprintf(msg, "Raw value: 0x%02X\r\n", chip_id);
+    USART2_SendString(msg);
+    USART2_SendString("==========================================================\r\n");
+
+    USART2_SendString("[3] Identifying the sensor (BME280 or BMP280)...\r\n");
+    if (chip_id == 0x60)
+    {
+        USART2_SendString("[*] BME280 detected (has humidity)\r\n");
+        USART2_SendString("[!] Humidity is not checked in this code...\r\n");
+    }
+    else
+        USART2_SendString("[*] BMP280 detected\r\n");
+    USART2_SendString("==========================================================\r\n");
+
+    *out_chip_id = chip_id;
+}
+
+static void Print_TempPressure(void)
+{
+    char msg[120];
+    int32_t  temp;
+    uint32_t press;
+
+    Read_TempPressure(&temp, &press);
+
+    int32_t  t_int  = temp / 100;
+    int32_t  t_frac = (temp < 0 ? -temp : temp) % 100;
+    uint32_t p_int  = press / 100;
+    uint32_t p_frac = press % 100;
+
+    sprintf(msg, "|       %6ld.%02ld°C           |      %6lu.%02lu hPa       |\r\n",
+            (long)t_int, (long)t_frac,
+            (unsigned long)p_int, (unsigned long)p_frac);
+    USART2_SendString(msg);
+}
+
 int main(void)
 {
-    char msg[512];
+    uint8_t chip_id;
 
     PLL_CONFIG();
     GPIO_CONFIG();
@@ -404,80 +457,29 @@ int main(void)
     USART2_CONFIG();
     SPI_Config();
     delay_ms(100);
+    USART2_SendString("UART OK.\r\n");
+    USART2_SendString("LAB 01 (Bare-Metal): BME/P-280 Sensor Communication by SPI\r\n");
+    delay_ms(5000);
+    Sensor_Check(&chip_id);
 
-    USART2_SendString(
-        "\r\n"
-        "============================================================\r\n"
-        "              BMP280 ENVIRONMENT MONITOR\r\n"
-        "============================================================\r\n"
-        " MCU        : STM32F446RE\r\n"
-        " Interface  : SPI1\r\n"
-        " Sensor     : BMP280/BME280\r\n"
-        "============================================================\r\n"
-    );
-
-    uint8_t chip_id = SPI_ReadByte(0xD0);
-
-    if (chip_id == 0x60)
-    	USART2_SendString(" Device Detected : BME280\r\n");
-
-    else if (chip_id == 0x58)
-    	USART2_SendString(" Device Detected : BMP280\r\n");
-
-    else
-    {
-        sprintf(msg,
-                "\r\n"
-                " ERROR: Unknown Device Detected\r\n"
-                " Chip ID : 0x%02X\r\n"
-                " Check SPI Connections\r\n",
-                chip_id);
-
-        USART2_SendString(msg);
-
-        while (1);
-    }
-
+    USART2_SendString("[4] Reading Chip Calibration Factors...\r\n");
     Load_Calibration();
-    Sensor_Init();
+    USART2_SendString("Calibration Factors found and loaded...\r\n");
+    USART2_SendString("==========================================================\r\n");
 
-    USART2_SendString(
-        " Calibration Data Loaded Successfully\r\n"
-        " Sensor Initialization Complete\r\n"
-        "============================================================\r\n"
-        " Starting Measurements...\r\n"
-        "============================================================\r\n"
-    );
+    USART2_SendString("[5] Configuring BME/P280 in Normal Mode...\r\n");
+    Sensor_Init();
+    USART2_SendString("BME/P Ready for Operation...\r\n");
+    delay_ms(5000);
+
+    USART2_SendString("==========================================================\r\n");
+    USART2_SendString("[6] Temperature and Pressure Record per Second...\r\n");
+    USART2_SendString("==========================================================\r\n");
+    USART2_SendString("|       Temperature (°C)      |      Pressure (hPa)      |\r\n");
 
     while (1)
     {
-        int32_t temp;
-        uint32_t press;
-
-        Read_TempPressure(&temp, &press);
-
-        int32_t t_int  = temp / 100;
-        int32_t t_frac = (temp < 0 ? -temp : temp) % 100;
-
-        uint32_t p_int  = press / 100;
-        uint32_t p_frac = press % 100;
-
-        sprintf(msg,
-                "\r\n"
-                "+----------------------------------------------------------+\r\n"
-                "|                  SENSOR LIVE DATA                        |\r\n"
-                "+----------------------------------------------------------+\r\n"
-                "| Temperature : %3ld.%02ld C                               |\r\n"
-                "| Pressure    : %4lu.%02lu hPa                             |\r\n"
-                "+----------------------------------------------------------+\r\n",
-                (long)t_int,
-                (long)t_frac,
-                (unsigned long)p_int,
-                (unsigned long)p_frac);
-
-        USART2_SendString(msg);
-
+        Print_TempPressure();
         delay_ms(1000);
     }
 }
-

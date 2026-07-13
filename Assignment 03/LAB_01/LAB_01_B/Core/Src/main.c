@@ -187,6 +187,62 @@ static void Read_TempPressure(int32_t *temp_c100, uint32_t *press_pa)
     *press_pa  = Compensate_Pressure(adc_P);
 }
 
+static void UART_SendString(const char *s)
+{
+    HAL_UART_Transmit(&huart2, (uint8_t *)s, strlen(s), HAL_MAX_DELAY);
+}
+
+static void Sensor_Check(void)
+{
+    char msg[80];
+
+    UART_SendString("==========================================================\r\n");
+    UART_SendString("[1] Sending CS Low and checking device response...\r\n");
+    uint8_t chip_id = SPI_ReadByte(BMP280_REG_CHIP_ID);
+    if (chip_id != CHIP_ID_BME280 && chip_id != CHIP_ID_BMP280)
+    {
+        UART_SendString("[!] No valid response received. Going idle...\r\n");
+        while (1);
+    }
+    UART_SendString("[*] Device response received...\r\n");
+    HAL_Delay(5000);
+
+    UART_SendString("==========================================================\r\n");
+    UART_SendString("[2] Reading chip ID register (0xD0)...\r\n");
+    snprintf(msg, sizeof(msg), "Raw value: 0x%02X\r\n", chip_id);
+    UART_SendString(msg);
+    UART_SendString("==========================================================\r\n");
+
+    UART_SendString("[3] Identifying the sensor (BME280 or BMP280)...\r\n");
+    if (chip_id == CHIP_ID_BME280)
+    {
+        UART_SendString("[*] BME280 detected (has humidity)\r\n");
+        UART_SendString("[!] Humidity is not checked in this code...\r\n");
+    }
+    else
+        UART_SendString("[*] BMP280 detected\r\n");
+    UART_SendString("==========================================================\r\n");
+}
+
+static void Print_TempPressure(void)
+{
+    char msg[120];
+    int32_t  temp;
+    uint32_t press;
+
+    Read_TempPressure(&temp, &press);
+
+    int32_t  t_int  = temp / 100;
+    int32_t  t_frac = (temp < 0 ? -temp : temp) % 100;
+    uint32_t p_int  = press / 100;
+    uint32_t p_frac = press % 100;
+
+    snprintf(msg, sizeof(msg), "|       %6ld.%02ld°C           |      %6lu.%02lu hPa       |\r\n",
+             (long)t_int, (long)t_frac,
+             (unsigned long)p_int, (unsigned long)p_frac);
+    UART_SendString(msg);
+}
+
 /* USER CODE END 0 */
 
 /**
@@ -225,43 +281,24 @@ int main(void)
   CS_HIGH();
   HAL_Delay(10);
 
-  char msg[512];
+  UART_SendString("LAB 01 (HAL): BME/P-280 Sensor Communication by SPI\r\n");
+  HAL_Delay(5000);
+  Sensor_Check();
 
-  HAL_UART_Transmit(&huart2,
-      (uint8_t *)"\r\n"
-      "============================================================\r\n"
-      "              BMP280 ENVIRONMENT MONITOR\r\n"
-      "============================================================\r\n"
-      " MCU        : STM32F446RE\r\n"
-      " Interface  : SPI1\r\n"
-      " Sensor     : BMP280/BME280\r\n"
-      "============================================================\r\n",
-      185, HAL_MAX_DELAY);
-
-  uint8_t chip_id = SPI_ReadByte(BMP280_REG_CHIP_ID);
-
-  if (chip_id == CHIP_ID_BME280)
-      HAL_UART_Transmit(&huart2, (uint8_t *)" Device Detected : BME280\r\n", 27, HAL_MAX_DELAY);
-  else if (chip_id == CHIP_ID_BMP280)
-      HAL_UART_Transmit(&huart2, (uint8_t *)" Device Detected : BMP280\r\n", 27, HAL_MAX_DELAY);
-  else {
-      snprintf(msg, sizeof(msg),
-               "\r\n ERROR: Unknown Device\r\n Chip ID : 0x%02X\r\n Check SPI Connections\r\n",
-               chip_id);
-      HAL_UART_Transmit(&huart2, (uint8_t *)msg, strlen(msg), HAL_MAX_DELAY);
-      while (1);
-  }
-
+  UART_SendString("[4] Reading Chip Calibration Factors...\r\n");
   Load_Calibration();
-  Sensor_Init();
+  UART_SendString("Calibration Factors found and loaded...\r\n");
+  UART_SendString("==========================================================\r\n");
 
-  HAL_UART_Transmit(&huart2,
-      (uint8_t *)" Calibration Data Loaded Successfully\r\n"
-                 " Sensor Initialization Complete\r\n"
-                 "============================================================\r\n"
-                 " Starting Measurements...\r\n"
-                 "============================================================\r\n",
-      167, HAL_MAX_DELAY);
+  UART_SendString("[5] Configuring BME/P280 in Normal Mode...\r\n");
+  Sensor_Init();
+  UART_SendString("BME/P Ready for Operation...\r\n");
+  HAL_Delay(5000);
+
+  UART_SendString("==========================================================\r\n");
+  UART_SendString("[6] Temperature and Pressure Record per Second...\r\n");
+  UART_SendString("==========================================================\r\n");
+  UART_SendString("|       Temperature (°C)      |      Pressure (hPa)      |\r\n");
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -269,28 +306,7 @@ int main(void)
   while (1)
   {
 	  /* USER CODE BEGIN 3 */
-	  int32_t  temp;
-	  uint32_t press;
-
-	  Read_TempPressure(&temp, &press);
-
-	  int32_t  t_int  = temp / 100;
-	  int32_t  t_frac = (temp < 0 ? -temp : temp) % 100;
-	  uint32_t p_int  = press / 100;
-	  uint32_t p_frac = press % 100;
-
-	  snprintf(msg, sizeof(msg),
-	           "\r\n"
-	           "+----------------------------------------------------------+\r\n"
-	           "|                  SENSOR LIVE DATA                        |\r\n"
-	           "+----------------------------------------------------------+\r\n"
-	           "| Temperature : %3ld.%02ld C                               |\r\n"
-	           "| Pressure    : %4lu.%02lu hPa                             |\r\n"
-	           "+----------------------------------------------------------+\r\n",
-	           (long)t_int,  (long)t_frac,
-	           (unsigned long)p_int, (unsigned long)p_frac);
-
-	  HAL_UART_Transmit(&huart2, (uint8_t *)msg, strlen(msg), HAL_MAX_DELAY);
+	  Print_TempPressure();
 	  HAL_Delay(1000);
 	  /* USER CODE END 3 */
   }
