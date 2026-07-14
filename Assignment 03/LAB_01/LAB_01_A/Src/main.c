@@ -185,6 +185,7 @@ static void SPI_Config(void)
 }
 /*
  * Since neither CPOL nor CPHA are set:
+ * SPI MODE -) 0
  * CPOL = 0
  *CPHA = 0
  *Clock Idle = LOW
@@ -193,6 +194,7 @@ static void SPI_Config(void)
 */
 
 /*Send 1 byte and receive 1 byte simultaneously. SPI is full-duplex.*/
+/* through shift register , after every clock , the bit shifts*/
 static uint8_t SPI_Transfer(uint8_t data)
 {
     while (!(SPI1->SR & SPI_SR_TXE)); //wait until buffer becomes empty
@@ -217,6 +219,8 @@ static uint8_t SPI_ReadByte(uint8_t reg)
      * 0xFF
      * creates 8 clocks.
      * Sensor returns register contents
+     * The SPI peripheral generates clock pulses only when the master writes something to the Data Registers
+     * 0xFF is commonly chosen because it leaves the MOSI line HIGH most of the time and is the conventional "dummy byte" in many SPI drivers.
      */
     CS_HIGH();//end of transmission
     return val; //return the value of the register
@@ -241,9 +245,7 @@ static void SPI_ReadBurst(uint8_t reg, uint8_t *buf, uint8_t len)
     CS_HIGH();
 }
 
-/* ------------------------------------------------------------------ */
-/*  Load calibration data (registers 0x88..0x9F)                      */
-/* ------------------------------------------------------------------ */
+/*  Load calibration data (registers 0x88..0x9F)*/
 static void Load_Calibration(void)
 {
     uint8_t c[24]; //24 bytes actually
@@ -277,9 +279,6 @@ static void Load_Calibration(void)
     P9 =  (int16_t)(c[23] << 8 | c[22]);
 }
 
-/* ------------------------------------------------------------------ */
-/*  Compensation formulas — straight from datasheet (integer math)    */
-/* ------------------------------------------------------------------ */
 
 /* Returns temperature in 0.01 °C units */
 //output will be temp*100 . like 2513 means 25.13 degree Celcius
@@ -315,19 +314,26 @@ static uint32_t Compensate_Pressure(int32_t adc_P)
     return (uint32_t)p / 256;
 }
 
-/* ------------------------------------------------------------------ */
-/*  Sensor init                                                        */
-/* ------------------------------------------------------------------ */
+/*  Sensor ini*/
 static void Sensor_Init(void)
 {
     SPI_WriteByte(0xE0, 0xB6);   /* soft reset, write 0xB6 to 0xE0 */
+    /*If we don't reset,
+
+old settings remain.
+
+program becomes unpredictable.
+
+Reset guarantees
+
+Known Starting State
+*/
     delay_ms(10); //for reset completion
-    SPI_WriteByte(0xF5, 0x10);  /* IIR filter = 2x . filter coefiicient for reducing noise*/
+    SPI_WriteByte(0xF5, 0x10);  /* IIR filter = 2x . 0xF5--> Config Register. filter coefiicient for reducing noise*/
 }
 
-/* ------------------------------------------------------------------ */
-/*  Trigger one forced-mode measurement                                */
-/* ------------------------------------------------------------------ */
+
+/*  Trigger one forced-mode measurement*/
 //spi is in sleep state . this function wakes up it
 static void Trigger_Measurement(void)
 {
@@ -338,7 +344,7 @@ static void Trigger_Measurement(void)
 	 * Take one measurement
 	 * Return to sleep
 	 */
-    SPI_WriteByte(0xF4, 0x57);
+    SPI_WriteByte(0xF4, 0x57); // 0xF7--> control measurement register, 0x57--> for oversampling temp , pressure
 
     /* Poll status bit[3] (measuring) until clear (~40 ms max) */
     uint32_t timeout = 200;
@@ -346,9 +352,7 @@ static void Trigger_Measurement(void)
         delay_ms(1);
 }
 
-/* ------------------------------------------------------------------ */
-/*  Read raw ADC + return compensated results                          */
-/* ------------------------------------------------------------------ */
+/*  Read raw ADC + return compensated results*/
 static void Read_TempPressure(int32_t *temp_c100, uint32_t *press_pa)
 {
     Trigger_Measurement(); //start conversion
