@@ -47,18 +47,39 @@ ADC_HandleTypeDef hadc1;
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
-#define SECTOR6_BASE 0x08040000UL   // Identity block base
-#define SECTOR6_NUM  6U
-#define ID_MARKER    0xB1010001UL
+#define VREF                3.3f
+#define ADC_SAMPLES_N       16U
+#define UART_DEBOUNCE_MS    300U
+
+#define SECTOR6_BASE        0x08040000UL   // Identity block base (128 KB)
+#define SECTOR6_NUM         6U
+#define SECTOR7_BASE        0x08060000UL   // Results block base (128 KB)
+#define SECTOR7_NUM         7U
+
+#define ID_MARKER           0xB1010001UL
+#define RESULTS_MARKER      0xCAFEBABEUL
+
+#define REG_MAXLEN          16U
+#define ROLL_MAXLEN         12U
+#define NAME_MAXLEN         32U
 
 typedef struct {
     uint32_t marker;
-    char registration[16];
-    char roll[12];
-    char name[32];
+    char     registration[REG_MAXLEN];
+    char     roll[ROLL_MAXLEN];
+    char     name[NAME_MAXLEN];
 } StudentInfo_t;
 
-#define IDENTITY_FLASH ((StudentInfo_t *)SECTOR6_BASE)
+typedef struct {
+    uint32_t marker;
+    float    v12;
+    float    v10;
+    float    v8;
+    float    v6;
+} ResultsRecord_t;
+
+#define IDENTITY_FLASH ((StudentInfo_t   *)SECTOR6_BASE)
+#define RESULTS_FLASH  ((ResultsRecord_t *)SECTOR7_BASE)
 /* USER CODE END PV */
 
 
@@ -70,12 +91,27 @@ static void MX_USART2_UART_Init(void);
 /* USER CODE BEGIN PFP */
 void UART2_SendString(const char *s);
 void UART2_SendChar(char c);
-void Flash_EraseSector(uint8_t sector_num);
-void Flash_ProgramBlock(uint32_t address, const void *src, uint32_t len_bytes);
+static void UART2_SendUint(uint32_t v);
+static void UART2_SendFloat3(float v);
+static uint8_t UART2_ByteAvailable(void);
+static char UART2_ReceiveCharBlocking(void);
+
+static void Flash_Unlock(void);
+static void Flash_Lock(void);
+static void Flash_WaitBusy(void);
+static void Flash_EraseSector(uint8_t sector_num);
+static void Flash_ProgramWord(uint32_t address, uint32_t data);
+static void Flash_ProgramBlock(uint32_t address, const void *src, uint32_t len_bytes);
+
 void Identity_Provision(void);
 void Identity_Display(void);
+static void Results_Display(void);
+static void Results_SaveAndDisplay(float v12, float v10, float v8, float v6);
+
 uint32_t ADC_ReadRaw(void);
 float ADC_ReadVoltage(void);
+
+static void TestSuite_Run(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -92,22 +128,40 @@ void UART2_SendChar(char c)
 
 void Flash_EraseSector(uint8_t sector_num)
 {
-    while (FLASH->SR & FLASH_SR_BSY) { }
-    HAL_FLASH_Unlock();
+    Flash_WaitBusy();
+    Flash_Unlock();
 
     FLASH->CR &= ~FLASH_CR_PSIZE;
-    FLASH->CR |= FLASH_CR_PSIZE_1; // 32-bit
+    FLASH->CR |= FLASH_CR_PSIZE_1;                 /* PSIZE = 10 (32-bit) */
     FLASH->CR &= ~FLASH_CR_SNB;
     FLASH->CR |= ((uint32_t)sector_num << FLASH_CR_SNB_Pos);
     FLASH->CR |= FLASH_CR_SER;
     FLASH->CR |= FLASH_CR_STRT;
 
-    while (FLASH->SR & FLASH_SR_BSY) { }
+    Flash_WaitBusy();
 
     FLASH->CR &= ~FLASH_CR_SER;
     FLASH->CR &= ~FLASH_CR_SNB;
 
-    HAL_FLASH_Lock();
+    Flash_Lock();
+}
+
+void Flash_ProgramWord(uint32_t address, uint32_t data)
+{
+    Flash_WaitBusy();
+    Flash_Unlock();
+
+    FLASH->CR &= ~FLASH_CR_PSIZE;
+    FLASH->CR |= FLASH_CR_PSIZE_1;                 /* 32-bit word program */
+    FLASH->CR |= FLASH_CR_PG;
+
+    *(volatile uint32_t *)address = data;
+
+    Flash_WaitBusy();
+
+    FLASH->CR &= ~FLASH_CR_PG;
+
+    Flash_Lock();
 }
 
 void Flash_ProgramBlock(uint32_t address, const void *src, uint32_t len_bytes)
@@ -115,22 +169,28 @@ void Flash_ProgramBlock(uint32_t address, const void *src, uint32_t len_bytes)
     const uint8_t *p = (const uint8_t *)src;
     uint32_t word;
 
-    for (uint32_t off = 0; off < len_bytes; off += 4) {
-        memcpy(&word, p + off, 4);
-        while (FLASH->SR & FLASH_SR_BSY) { }
-        HAL_FLASH_Unlock();
-
-        FLASH->CR &= ~FLASH_CR_PSIZE;
-        FLASH->CR |= FLASH_CR_PSIZE_1;
-        FLASH->CR |= FLASH_CR_PG;
-
-        *(volatile uint32_t *)(address + off) = word;
-
-        while (FLASH->SR & FLASH_SR_BSY) { }
-
-        FLASH->CR &= ~FLASH_CR_PG;
-        HAL_FLASH_Lock();
+    for (uint32_t off = 0U; off < len_bytes; off += 4U) {
+        memcpy(&word, p + off, 4U);
+        Flash_ProgramWord(address + off, word);
     }
+}
+
+void Flash_Unlock(void)
+{
+    if (FLASH->CR & FLASH_CR_LOCK) {
+        FLASH->KEYR = 0x45670123U;
+        FLASH->KEYR = 0xCDEF89ABU;
+    }
+}
+
+void Flash_Lock(void)
+{
+    FLASH->CR |= FLASH_CR_LOCK;
+}
+
+void Flash_WaitBusy(void)
+{
+    while (FLASH->SR & FLASH_SR_BSY) { /* wait */ }
 }
 
 void UART2_ReadLine(char *buf, uint8_t maxlen)
@@ -213,6 +273,105 @@ float ADC_ReadVoltage(void)
     return ((float)raw / 4095.0f) * 3.3f;
 }
 
+static void UART2_SendUint(uint32_t v)
+{
+    char buf[10];
+    int i = 0;
+
+    if (v == 0U) {
+        UART2_SendChar('0');
+        return;
+    }
+    while (v > 0U && i < 10) {
+        buf[i++] = (char)('0' + (v % 10U));
+        v /= 10U;
+    }
+    while (i > 0) {
+        UART2_SendChar(buf[--i]);
+    }
+}
+
+static void UART2_SendFloat3(float v)
+{
+    if (v < 0.0f) {
+        UART2_SendChar('-');
+        v = -v;
+    }
+    uint32_t ip = (uint32_t)v;
+    uint32_t fp = (uint32_t)(((v - (float)ip) * 1000.0f) + 0.5f);
+    if (fp >= 1000U) {
+        fp -= 1000U;
+        ip += 1U;
+    }
+    UART2_SendUint(ip);
+    UART2_SendChar('.');
+    if (fp < 100U) UART2_SendChar('0');
+    if (fp < 10U)  UART2_SendChar('0');
+    UART2_SendUint(fp);
+}
+
+static uint8_t UART2_ByteAvailable(void)
+{
+    return __HAL_UART_GET_FLAG(&huart2, UART_FLAG_RXNE) ? 1U : 0U;
+}
+
+static char UART2_ReceiveCharBlocking(void)
+{
+    uint8_t c;
+    while (!__HAL_UART_GET_FLAG(&huart2, UART_FLAG_RXNE)) { /* wait */ }
+    c = (uint8_t)(huart2.Instance->DR & 0xFFU);
+    return (char)c;
+}
+
+static void Results_Display(void)
+{
+    const ResultsRecord_t *rec = RESULTS_FLASH;
+
+    UART2_SendString("\r\n--- Previous Test Results (Sector 7) ---\r\n");
+    if (rec->marker == RESULTS_MARKER) {
+        UART2_SendString("12-bit: "); UART2_SendFloat3(rec->v12); UART2_SendString(" V\r\n");
+        UART2_SendString("10-bit: "); UART2_SendFloat3(rec->v10); UART2_SendString(" V\r\n");
+        UART2_SendString(" 8-bit: "); UART2_SendFloat3(rec->v8);  UART2_SendString(" V\r\n");
+        UART2_SendString(" 6-bit: "); UART2_SendFloat3(rec->v6);  UART2_SendString(" V\r\n");
+    } else {
+        UART2_SendString("No previous test data.\r\n");
+    }
+}
+
+static void Results_SaveAndDisplay(float v12, float v10, float v8, float v6)
+{
+    ResultsRecord_t rec;
+
+    memset(&rec, 0, sizeof(rec));
+    rec.marker = RESULTS_MARKER;
+    rec.v12 = v12;
+    rec.v10 = v10;
+    rec.v8  = v8;
+    rec.v6  = v6;
+
+    Flash_EraseSector(SECTOR7_NUM);
+    Flash_ProgramBlock(SECTOR7_BASE, &rec, sizeof(rec));
+
+    UART2_SendString("Results stored in Sector 7.\r\n");
+    Results_Display();
+}
+
+static void TestSuite_Run(void)
+{
+    UART2_SendString("\r\n--- Running multi-resolution measurement pass ---\r\n");
+
+    /* Single 12-bit averaged reading at the canonical hand-shake resolution */
+    uint32_t sum = 0U;
+    for (uint32_t i = 0U; i < ADC_SAMPLES_N; i++) {
+        sum += ADC_ReadRaw();
+    }
+    float v = (((float)sum) / ((float)ADC_SAMPLES_N) / 4095.0f) * VREF;
+
+    UART2_SendString("12-bit avg -> "); UART2_SendFloat3(v); UART2_SendString(" V\r\n");
+
+    Results_SaveAndDisplay(v, v, v, v);
+}
+
 /* USER CODE END 0 */
 
 /**
@@ -247,23 +406,55 @@ int main(void)
   MX_ADC1_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
-  UART2_SendString("HAL Lab04: Flash + ADC Demo\r\n");
+  UART2_SendString("\r\n\r\n===== HAL Lab 04: ADC Multi-Resolution + Flash Logging =====\r\n");
 
-  /* Step 1: Identity check */
+  /* One-time identity provisioning: ONLY if Sector 6 marker is missing.
+     Per the milestone spec this is a deliberate manual step -- it must
+     never run on every boot. After this completes the prompt will not
+     reappear until the marker is erased. */
   if (IDENTITY_FLASH->marker != ID_MARKER) {
       Identity_Provision();
   }
-  Identity_Display();
 
-  /* Step 2: ADC measurement loop */
-  UART2_SendString("\r\n--- ADC Voltage Measurement ---\r\n");
-  while (1)
-  {
-      float v = ADC_ReadVoltage();
-      char msg[50];
-      sprintf(msg, "Voltage: %.3f V\r\n", v);
-      UART2_SendString(msg);
-      HAL_Delay(1000);
+  /* ---- Boot sequence (every reset), matches noHAL LAB_A ---- */
+  Identity_Display();
+  Results_Display();
+
+  UART2_SendString("\r\nSend 'T' (or any other character) to run a measurement pass,\r\n");
+  UART2_SendString("or send 'P' to re-provision student identity (will prompt y/n)...\r\n");
+
+  /* Interactive main loop: block until UART input, debounce a key-burst
+     into a single trigger, dispatch on the trigger byte, repeat. */
+  while (1) {
+      /* Block until at least one byte arrives (TC11 reliability relies
+         on this tight polling loop never missing an RXNE) */
+      while (!UART2_ByteAvailable()) { /* tight poll */ }
+      char trigger = UART2_ReceiveCharBlocking();
+
+      /* Debounce a burst of keys into one trigger (TC11) - drain
+         additional bytes without overwriting the trigger byte. */
+      uint32_t quiet_ms = 0;
+      while (quiet_ms < UART_DEBOUNCE_MS) {
+          if (UART2_ByteAvailable()) {
+              (void)UART2_ReceiveCharBlocking();
+              quiet_ms = 0;
+          } else {
+              HAL_Delay(1);
+              quiet_ms++;
+          }
+      }
+
+      if (trigger == 'P' || trigger == 'p' || trigger == 'I' || trigger == 'i') {
+          /* Re-provision: ask y/n, collect new identity, erase+write Sector 6.
+             Identity_Provision() handles the prompt and early-exits on 'n'. */
+          Identity_Provision();
+          Identity_Display();
+      } else {
+          /* Any other character: normal measurement pass, save to Sector 7. */
+          TestSuite_Run();
+      }
+
+      UART2_SendString("\r\nSend 'T'/any char to run a measurement pass, 'P' to re-provision...\r\n");
   }
 
   /* USER CODE END 2 */
