@@ -32,13 +32,14 @@
  * =====================================================================
  */
 
-#include "stm32f4xx.h"
+#include "stm32f446xx.h"
 #include <stdint.h>
 #include <string.h>
 
 /* --------------------------------------------------------------------
  * Configuration
  * ------------------------------------------------------------------*/
+uint32_t SystemCoreClock = 	16000000U;
 #define VREF                3.3f     /* board VDDA, adjust if different */
 #define ADC_SAMPLES_N       16U      /* N samples averaged per resolution
                                          (chosen per Milestone D: large
